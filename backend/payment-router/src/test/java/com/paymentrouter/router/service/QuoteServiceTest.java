@@ -20,6 +20,7 @@ import com.paymentrouter.router.entity.ProviderStatus;
 import com.paymentrouter.router.exception.InvalidPaymentRequestException;
 import com.paymentrouter.router.strategy.DfspAStrategy;
 import com.paymentrouter.router.strategy.DfspBStrategy;
+import com.paymentrouter.router.strategy.DfspStrategyFactory;
 
 /**
  * Unit test for quote calculation with the real DFSP strategies.
@@ -38,7 +39,8 @@ class QuoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        quoteService = new QuoteService(paymentRequestValidator, List.of(new DfspAStrategy(), new DfspBStrategy()));
+        DfspStrategyFactory factory = new DfspStrategyFactory(List.of(new DfspAStrategy(), new DfspBStrategy()));
+        quoteService = new QuoteService(paymentRequestValidator, factory);
     }
 
     @Test

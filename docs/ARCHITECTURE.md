@@ -225,9 +225,11 @@ classDiagram
 
 `DfspStrategyFactory` answers one question: *"Which strategy handles destination `DFSP_B`?"*
 
-> **Current status (Step 12):** only `QuoteService` needs this lookup, so it builds the
-> `Map<String, DfspStrategy>` itself from the injected strategy list. The lookup moves into
-> `DfspStrategyFactory` once `TransferService` needs the same lookup.
+> **Decision (Step 13):** implemented as a *selection* factory. Spring DI already creates
+> the strategy objects, so the factory does not call `new`. It indexes the injected
+> strategies by provider code, fails at startup on duplicate codes, and throws when a
+> provider has no strategy. `QuoteService` uses it now and `TransferService` will reuse it,
+> so this selection logic is written once.
 
 - Spring injects **all** `DfspStrategy` beans as a `List`.
 - The factory builds a `Map<String, DfspStrategy>` keyed by `getProviderCode()`.
