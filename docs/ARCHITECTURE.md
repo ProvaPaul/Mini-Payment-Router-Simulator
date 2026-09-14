@@ -201,7 +201,7 @@ classDiagram
 classDiagram
     class DfspClient {
         <<interface>>
-        +transfer(DfspTransferRequest, baseUrl) DfspTransferResult
+        +transfer(baseUrl, DfspTransferRequest) DfspTransferResult
     }
     class DfspAAdapter {
         taka → taka
