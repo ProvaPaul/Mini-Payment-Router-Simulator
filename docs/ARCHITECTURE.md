@@ -439,12 +439,18 @@ erDiagram
     }
 ```
 
-**Seed data**, inserted at startup only if it does not already exist:
+**Seed data.** `ProviderDataInitializer` (a Spring `ApplicationRunner`) inserts
+each provider at startup **only if its code does not exist yet**. Existing rows
+are never overwritten, so a fee changed later in the database survives restarts.
 
-| code   | name   | base_url             | fee_percentage | status |
-|--------|--------|----------------------|----------------|--------|
-| DFSP_A | DFSP-A | `http://dfsp-a:8081` | 1.00           | ACTIVE |
-| DFSP_B | DFSP-B | `http://dfsp-b:8082` | 1.50           | ACTIVE |
+| code   | name   | base_url (local default / Docker)              | fee_percentage | status |
+|--------|--------|------------------------------------------------|----------------|--------|
+| DFSP_A | DFSP-A | `http://localhost:8081` / `http://dfsp-a:8081` | 1.00           | ACTIVE |
+| DFSP_B | DFSP-B | `http://localhost:8082` / `http://dfsp-b:8082` | 1.50           | ACTIVE |
+
+The base URL comes from `DFSP_A_BASE_URL` / `DFSP_B_BASE_URL`, falling back to
+the local default. Fee percentages are never hard-coded in calculation logic;
+quotes and transfers always read them from `providers`.
 
 **Responsibilities**
 - `providers` = **current configuration**. It can change, for example DFSP-B moving from 1.5% to 2%.
@@ -503,7 +509,7 @@ the DFSPs minimal.
 - **Named volume `pgdata`** keeps database data across restarts.
 - **Bind mount `./logs:/app/logs`** makes the log file visible on the host.
 - **Environment variables** configure the DB connection (`SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/payment_router`, username, password).
-- DFSP addresses come from `providers.base_url` and use service names (`http://dfsp-a:8081`).
+- DFSP addresses come from `providers.base_url`. In Docker they are seeded as service names through `DFSP_A_BASE_URL=http://dfsp-a:8081` and `DFSP_B_BASE_URL=http://dfsp-b:8082`.
 - Start everything with `docker compose up --build`, then open `http://localhost:3000`.
 
 Planned repository layout:
