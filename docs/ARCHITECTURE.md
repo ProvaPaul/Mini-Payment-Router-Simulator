@@ -417,24 +417,24 @@ erDiagram
     providers ||--o{ transactions : "destination_provider_id"
 
     providers {
-        BIGSERIAL id PK
-        VARCHAR code UK "DFSP_A, DFSP_B"
-        VARCHAR name
-        VARCHAR base_url "http://dfsp-a:8081"
-        NUMERIC fee_percentage "5,2"
-        VARCHAR status "ACTIVE / INACTIVE"
+        BIGINT id PK "identity"
+        VARCHAR_20 code UK "uk_providers_code"
+        VARCHAR_100 name
+        VARCHAR_255 base_url "http://dfsp-a:8081"
+        NUMERIC_5_2 fee_percentage "current config"
+        VARCHAR_20 status "ACTIVE / INACTIVE"
         TIMESTAMPTZ created_at
     }
     transactions {
-        BIGSERIAL id PK
-        UUID transaction_id UK
-        BIGINT source_provider_id FK
-        BIGINT destination_provider_id FK
-        NUMERIC amount "12,2"
-        NUMERIC fee_percentage "5,2 snapshot"
-        NUMERIC fee_amount "12,2 snapshot"
-        NUMERIC total_amount "12,2 snapshot"
-        VARCHAR status "SUCCESS / FAILED"
+        BIGINT id PK "identity"
+        UUID transaction_id UK "uk_transactions_transaction_id"
+        BIGINT source_provider_id FK "fk_transactions_source_provider"
+        BIGINT destination_provider_id FK "fk_transactions_destination_provider"
+        NUMERIC_12_2 amount
+        NUMERIC_5_2 fee_percentage "snapshot"
+        NUMERIC_12_2 fee_amount "snapshot"
+        NUMERIC_12_2 total_amount "snapshot"
+        VARCHAR_20 status "SUCCESS / FAILED"
         TIMESTAMPTZ created_at
     }
 ```
@@ -456,7 +456,7 @@ A → B transaction for 1000 still shows **1.5% / 15 / 1015**. Reading the fee f
 `providers` for old rows would silently rewrite history.
 
 **Two IDs in `transactions`**
-- `id` (BIGSERIAL): the internal primary key, small and fast, used for joins and never exposed.
+- `id` (BIGINT identity): the internal primary key, small and fast, used for joins and never exposed.
 - `transaction_id` (UUID): the public business identifier returned by the API and sent to DFSPs. It cannot be guessed and does not reveal how many transactions exist.
 
 **Other decisions**
