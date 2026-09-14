@@ -132,7 +132,8 @@ Controller  →  Service  →  Strategy  →  Adapter (DfspClient)  →  Dummy D
 Planned packages:
 
 ```
-backend/payment-router/src/main/java/com/paymentrouter/
+backend/payment-router/src/main/java/com/paymentrouter/router/
+├── PaymentRouterApplication.java
 ├── controller/   QuoteController, TransferController,
 │                 ProviderController, TransactionController
 ├── dto/          QuoteRequest, QuoteResponse, TransferRequest,

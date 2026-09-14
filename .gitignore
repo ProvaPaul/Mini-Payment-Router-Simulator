@@ -1,0 +1,9 @@
+# Runtime log files (written by payment-router)
+logs/
+
+# Local environment overrides
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
