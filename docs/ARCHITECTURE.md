@@ -138,7 +138,7 @@ backend/payment-router/src/main/java/com/paymentrouter/router/
 │                 ProviderController, TransactionController
 ├── dto/          QuoteRequest, QuoteResponse, TransferRequest,
 │                 TransferResponse, ProviderResponse, TransactionResponse, ErrorResponse
-├── service/      ProviderService, QuoteService, TransferService
+├── service/      PaymentRequestValidator, PaymentProviders, QuoteService, TransferService
 ├── strategy/     DfspStrategy, DfspAStrategy, DfspBStrategy,
 │                 DfspStrategyFactory, QuoteCalculation
 ├── client/       DfspClient, DfspAAdapter, DfspBAdapter,
@@ -152,8 +152,8 @@ backend/payment-router/src/main/java/com/paymentrouter/router/
 | Layer / Component     | Responsibility                                                            | Must NOT do                      |
 |-----------------------|---------------------------------------------------------------------------|----------------------------------|
 | Controller            | Receive HTTP, trigger `@Valid`, call a service, return a response         | Business rules, DB access        |
-| ProviderService       | Find provider by code, ensure it exists and is ACTIVE                     | HTTP calls                       |
-| QuoteService          | Validate the pair, pick the strategy, calculate fee and total             | Save anything                    |
+| PaymentRequestValidator | Business validation: source ≠ destination, providers exist and are ACTIVE | HTTP calls                     |
+| QuoteService          | Call the validator, pick the strategy, calculate fee and total            | Save anything                    |
 | TransferService       | Reuse QuoteService, route through the strategy, save the snapshot, log     | Know DFSP JSON formats           |
 | DfspStrategy          | DFSP-specific behaviour: pricing policy and which client to use            | Build raw HTTP/JSON              |
 | DfspClient (Adapter)  | Translate the common model ⇄ a DFSP's own API, make the HTTP call           | Business decisions               |
@@ -312,12 +312,13 @@ It is saved and returned as a `FAILED` transaction.
 | Amount is required and greater than zero    | Request DTO                               | `@NotNull`, `@Positive` + `@Valid` |
 | Source provider is required                 | Request DTO                               | `@NotBlank`                        |
 | Destination provider is required            | Request DTO                               | `@NotBlank`                        |
-| Source and destination are not the same     | `QuoteService`                            | Business check → 400               |
-| Provider exists (and is ACTIVE)             | `ProviderService`                         | DB lookup → 400                    |
+| Source and destination are not the same     | `PaymentRequestValidator`                 | Business check → 400               |
+| Provider exists and is ACTIVE               | `PaymentRequestValidator`                 | DB lookup → 400                    |
 
-`GlobalExceptionHandler` (`@RestControllerAdvice`) converts every validation
-failure into the error JSON above. Quote and transfer share the same checks,
-because `TransferService` reuses `QuoteService`.
+Request validation runs first (`@Valid`), so an invalid request never reaches a service.
+`GlobalExceptionHandler` (`@RestControllerAdvice`) converts `MethodArgumentNotValidException`
+(field errors) and `InvalidPaymentRequestException` (business rules) into the error JSON above.
+Quote and transfer share the same business checks through `PaymentRequestValidator`.
 
 ---
 
@@ -331,7 +332,7 @@ sequenceDiagram
     participant FE as frontend (Nginx)
     participant QC as QuoteController
     participant QS as QuoteService
-    participant PS as ProviderService
+    participant PV as PaymentRequestValidator
     participant DB as PostgreSQL
     participant SF as DfspStrategyFactory
     participant ST as DfspStrategy (destination)
@@ -339,11 +340,12 @@ sequenceDiagram
     U->>FE: choose A → B, amount 1000, click "Get Quote"
     FE->>QC: POST /api/quotes
     QC->>QC: @Valid (400 if amount ≤ 0 / codes missing)
-    QC->>QS: quote(request)
-    QS->>QS: source ≠ destination? (400)
-    QS->>PS: getActiveProvider(DFSP_A), getActiveProvider(DFSP_B)
-    PS->>DB: SELECT * FROM providers WHERE code = ?
-    DB-->>PS: provider rows (400 if missing)
+    QC->>QS: calculateQuote(request)
+    QS->>PV: validate(DFSP_A, DFSP_B)
+    PV->>PV: source ≠ destination? (400)
+    PV->>DB: SELECT * FROM providers WHERE code = ?
+    DB-->>PV: provider rows (400 if missing or inactive)
+    PV-->>QS: PaymentProviders(source, destination)
     QS->>SF: getStrategy("DFSP_B")
     SF-->>QS: DfspBStrategy
     QS->>ST: calculateQuote(1000, DFSP-B provider)

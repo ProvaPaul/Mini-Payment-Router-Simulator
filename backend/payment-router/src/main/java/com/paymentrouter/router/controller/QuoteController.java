@@ -9,6 +9,8 @@ import com.paymentrouter.router.dto.QuoteRequest;
 import com.paymentrouter.router.dto.QuoteResponse;
 import com.paymentrouter.router.service.QuoteService;
 
+import jakarta.validation.Valid;
+
 /**
  * HTTP entry point for quotes. Delegates all work to {@link QuoteService}.
  */
@@ -24,7 +26,7 @@ public class QuoteController {
 
     /** POST /api/quotes: calculates fee and total for a transfer without executing it. */
     @PostMapping
-    public QuoteResponse calculateQuote(@RequestBody QuoteRequest request) {
+    public QuoteResponse calculateQuote(@Valid @RequestBody QuoteRequest request) {
         return quoteService.calculateQuote(request);
     }
 }

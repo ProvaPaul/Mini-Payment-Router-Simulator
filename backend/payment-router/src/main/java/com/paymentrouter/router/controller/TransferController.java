@@ -11,6 +11,8 @@ import com.paymentrouter.router.dto.TransferRequest;
 import com.paymentrouter.router.dto.TransferResponse;
 import com.paymentrouter.router.service.TransferService;
 
+import jakarta.validation.Valid;
+
 /**
  * HTTP entry point for transfers. Delegates all work to {@link TransferService}.
  */
@@ -27,7 +29,7 @@ public class TransferController {
     /** POST /api/transfers: executes a transfer and returns the recorded transaction. */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TransferResponse executeTransfer(@RequestBody TransferRequest request) {
+    public TransferResponse executeTransfer(@Valid @RequestBody TransferRequest request) {
         return transferService.executeTransfer(request);
     }
 }
