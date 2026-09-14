@@ -225,6 +225,10 @@ classDiagram
 
 `DfspStrategyFactory` answers one question: *"Which strategy handles destination `DFSP_B`?"*
 
+> **Current status (Step 12):** only `QuoteService` needs this lookup, so it builds the
+> `Map<String, DfspStrategy>` itself from the injected strategy list. The lookup moves into
+> `DfspStrategyFactory` once `TransferService` needs the same lookup.
+
 - Spring injects **all** `DfspStrategy` beans as a `List`.
 - The factory builds a `Map<String, DfspStrategy>` keyed by `getProviderCode()`.
 - `getStrategy(code)` returns the match, or throws an error if no strategy exists for that code.

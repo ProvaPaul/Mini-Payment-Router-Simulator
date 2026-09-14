@@ -5,10 +5,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.util.List;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -17,9 +18,12 @@ import com.paymentrouter.router.dto.QuoteResponse;
 import com.paymentrouter.router.entity.Provider;
 import com.paymentrouter.router.entity.ProviderStatus;
 import com.paymentrouter.router.exception.InvalidPaymentRequestException;
+import com.paymentrouter.router.strategy.DfspAStrategy;
+import com.paymentrouter.router.strategy.DfspBStrategy;
 
 /**
- * Unit test for quote calculation. Validation is mocked, so no database is needed.
+ * Unit test for quote calculation with the real DFSP strategies.
+ * Validation is mocked, so no database is needed.
  */
 @ExtendWith(MockitoExtension.class)
 class QuoteServiceTest {
@@ -30,8 +34,12 @@ class QuoteServiceTest {
     @Mock
     private PaymentRequestValidator paymentRequestValidator;
 
-    @InjectMocks
     private QuoteService quoteService;
+
+    @BeforeEach
+    void setUp() {
+        quoteService = new QuoteService(paymentRequestValidator, List.of(new DfspAStrategy(), new DfspBStrategy()));
+    }
 
     @Test
     void usesDestinationFeeForAToB() {
@@ -76,6 +84,16 @@ class QuoteServiceTest {
 
         assertThatThrownBy(() -> quoteService.calculateQuote(new QuoteRequest("DFSP_A", "DFSP_A", new BigDecimal("1000"))))
                 .isInstanceOf(InvalidPaymentRequestException.class);
+    }
+
+    @Test
+    void failsWhenProviderHasNoStrategy() {
+        Provider dfspC = provider("DFSP_C", "2.00");
+        when(paymentRequestValidator.validate("DFSP_A", "DFSP_C")).thenReturn(new PaymentProviders(dfspA, dfspC));
+
+        assertThatThrownBy(() -> quoteService.calculateQuote(new QuoteRequest("DFSP_A", "DFSP_C", new BigDecimal("1000"))))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("No DFSP strategy registered for provider DFSP_C");
     }
 
     private static Provider provider(String code, String feePercentage) {
