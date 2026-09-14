@@ -310,6 +310,7 @@ It is saved and returned as a `FAILED` transaction.
 | Rule                                        | Where                                     | Mechanism                          |
 |---------------------------------------------|-------------------------------------------|------------------------------------|
 | Amount is required and greater than zero    | Request DTO                               | `@NotNull`, `@Positive` + `@Valid` |
+| Amount has at most 2 decimal places         | Request DTO                               | `@Digits(integer = 10, fraction = 2)` |
 | Source provider is required                 | Request DTO                               | `@NotBlank`                        |
 | Destination provider is required            | Request DTO                               | `@NotBlank`                        |
 | Source and destination are not the same     | `PaymentRequestValidator`                 | Business check → 400               |

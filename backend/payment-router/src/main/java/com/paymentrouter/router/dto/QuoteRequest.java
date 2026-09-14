@@ -2,6 +2,7 @@ package com.paymentrouter.router.dto;
 
 import java.math.BigDecimal;
 
+import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -25,5 +26,6 @@ public record QuoteRequest(
 
         @NotNull(message = "amount is required")
         @Positive(message = "amount must be greater than zero")
+        @Digits(integer = 10, fraction = 2, message = "amount must have at most 10 digits and 2 decimal places")
         BigDecimal amount) {
 }
