@@ -83,7 +83,7 @@ current `fee_percentage`.
 - It holds **no business logic**. Fee calculation and validation belong to the backend. (Simple UI checks are allowed for user experience only.)
 - In Docker, **Nginx** serves the built static files and reverse-proxies `/api` to `payment-router:8080`. In local development the **Vite dev server** proxies `/api` to `http://localhost:8080` the same way. The browser sees one origin, so CORS is not involved.
 - The router also has a narrow **CORS allow-list** (`app.cors.allowed-origins`, default `http://localhost:5173,http://localhost:4173`: `/api/**`, GET/POST, `Content-Type` only). It is used only when the frontend calls the router directly through `VITE_API_BASE_URL`.
-- **A proxy must keep the browser's `Host` header** (Vite: `changeOrigin: false`; Nginx: `proxy_set_header Host $host`). Browsers send an `Origin` header on POST. If the proxy rewrites `Host` to the router's address, Spring sees Origin ≠ Host, treats the call as cross-origin, and rejects POSTs from origins outside the allow-list with 403 "Invalid CORS request".
+- **A proxy must keep the browser's `Host` header** (Vite: `changeOrigin: false`; Nginx: `proxy_set_header Host $http_host`, which includes the port, unlike `$host`). Browsers send an `Origin` header on POST. If the proxy rewrites `Host` to the router's address, Spring sees Origin ≠ Host, treats the call as cross-origin, and rejects POSTs from origins outside the allow-list with 403 "Invalid CORS request".
 
 ### 3.2 Payment Router (`payment-router`) — the main backend
 - Exposes the public REST API.
@@ -521,14 +521,18 @@ the DFSPs minimal.
 
 | Service          | Image / build                         | Port (host:container) | Depends on                 |
 |------------------|---------------------------------------|-----------------------|----------------------------|
-| `frontend`       | Node build → `nginx:alpine`           | `3000:80`             | payment-router             |
-| `payment-router` | Maven build → JRE 21                  | `8080:8080`           | postgres (healthy), dfsp-a, dfsp-b |
-| `dfsp-a`         | Maven build → JRE 21                  | `8081:8081`           | –                          |
-| `dfsp-b`         | Maven build → JRE 21                  | `8082:8082`           | –                          |
+| `frontend`       | `node:22-alpine` build → `nginx:1.27-alpine` | `${FRONTEND_PORT:-3000}:80` | payment-router (healthy) |
+| `payment-router` | `maven:3.9-eclipse-temurin-21` build → `eclipse-temurin:21-jre-alpine` | `8080:8080` | postgres (healthy), dfsp-a, dfsp-b |
+| `dfsp-a`         | Maven build → `eclipse-temurin:21-jre-alpine` | `8081:8081`       | –                          |
+| `dfsp-b`         | Maven build → `eclipse-temurin:21-jre-alpine` | `8082:8082`       | –                          |
 | `postgres`       | `postgres:16-alpine`                  | not published         | –                          |
 
 - **Multi-stage Dockerfiles.** Build tools (Maven, Node) stay in the build stage; the final image only contains what is needed to run.
 - **Healthcheck on postgres** (`pg_isready`). `payment-router` waits for `condition: service_healthy`, so it does not start before the DB accepts connections.
+- **Healthcheck on payment-router** (`wget http://localhost:8080/api/status` inside its own container). `frontend` waits until the router is healthy.
+- **Tests are not run inside the image build** (`-DskipTests`), because the router's tests need PostgreSQL. Run them with `./mvnw test` before building.
+- **Nginx** (`frontend/nginx.conf`) serves the React build and proxies `/api/` to `http://payment-router:8080` with `Host $http_host`.
+- **`.env.example`** lists the optional overrides (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `FRONTEND_PORT`). Every value has a default in `docker-compose.yml`.
 - **Named volume `pgdata`** keeps database data across restarts.
 - **Bind mount `./logs:/app/logs`** makes the log file visible on the host.
 - **Environment variables** configure the DB connection (`SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/payment_router`, username, password).
