@@ -154,7 +154,7 @@ backend/payment-router/src/main/java/com/paymentrouter/router/
 | Controller            | Receive HTTP, trigger `@Valid`, call a service, return a response         | Business rules, DB access        |
 | PaymentRequestValidator | Business validation: source ≠ destination, providers exist and are ACTIVE | HTTP calls                     |
 | QuoteService          | Call the validator, pick the strategy, calculate fee and total            | Save anything                    |
-| TransferService       | Reuse QuoteService, route through the strategy, save the snapshot, log     | Know DFSP JSON formats           |
+| TransferService       | Validate, price with the strategy, route via strategy → adapter, save the snapshot, log | Know DFSP JSON formats |
 | DfspStrategy          | DFSP-specific behaviour: pricing policy and which client to use            | Build raw HTTP/JSON              |
 | DfspClient (Adapter)  | Translate the common model ⇄ a DFSP's own API, make the HTTP call           | Business decisions               |
 | Repository            | Read and write the database                                               | Business rules                   |
@@ -228,7 +228,7 @@ classDiagram
 > **Decision (Step 13):** implemented as a *selection* factory. Spring DI already creates
 > the strategy objects, so the factory does not call `new`. It indexes the injected
 > strategies by provider code, fails at startup on duplicate codes, and throws when a
-> provider has no strategy. `QuoteService` uses it now and `TransferService` will reuse it,
+> provider has no strategy. `QuoteService` and `TransferService` (Step 17) both use it,
 > so this selection logic is written once.
 
 - Spring injects **all** `DfspStrategy` beans as a `List`.
@@ -373,7 +373,7 @@ sequenceDiagram
     participant FE as frontend (Nginx)
     participant TC as TransferController
     participant TS as TransferService
-    participant QS as QuoteService
+    participant PV as PaymentRequestValidator
     participant SF as DfspStrategyFactory
     participant ST as DfspBStrategy
     participant AD as DfspBAdapter
@@ -383,11 +383,14 @@ sequenceDiagram
     U->>FE: click "Transfer"
     FE->>TC: POST /api/transfers
     TC->>TC: @Valid
-    TC->>TS: transfer(request)
-    TS->>QS: validate + calculate (same as quote flow)
-    QS-->>TS: providers + QuoteCalculation (1.5%, 15, 1015)
-    TS->>TS: generate transactionId (UUID)
+    TC->>TS: executeTransfer(request)
+    TS->>PV: validate(DFSP_A, DFSP_B)
+    PV-->>TS: PaymentProviders(source, destination)
     TS->>SF: getStrategy("DFSP_B")
+    SF-->>TS: DfspBStrategy
+    TS->>ST: calculateQuote(1000, DFSP-B provider)
+    ST-->>TS: QuoteCalculation (1.5%, 15, 1015)
+    TS->>TS: generate transactionId (UUID)
     TS->>ST: executeTransfer(request, DFSP-B provider)
     ST->>AD: transfer(common request, base_url)
     AD->>D: POST /v1/payments/receive {amountInPaisa: 100000, ...}
@@ -403,7 +406,7 @@ sequenceDiagram
 
 Step by step:
 1. **Validate**: DTO rules, source ≠ destination, both providers exist and are ACTIVE.
-2. **Determine the destination provider** and **calculate** fee % / fee / total with the *current* configuration. The work is delegated to `QuoteService`, so the quote and transfer rules are the same code.
+2. **Determine the destination provider** and **calculate** fee % / fee / total with the *current* configuration. Pricing uses the destination strategy's `calculateQuote`, the same method quotes use, so the quote and transfer rules are the same code.
 3. **Generate** a unique `transactionId` before calling the DFSP, so the DFSP receives it as a reference.
 4. **Route**: `DfspStrategyFactory` → destination strategy → its adapter → HTTP call to the DFSP's `base_url`.
 5. **Receive the response**: the adapter maps it to `SUCCESS` or `FAILED`. If the DFSP is unreachable or times out, the service catches `DfspCommunicationException` and the status is `FAILED`.

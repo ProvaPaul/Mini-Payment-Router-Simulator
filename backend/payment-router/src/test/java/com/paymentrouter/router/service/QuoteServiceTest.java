@@ -2,6 +2,7 @@ package com.paymentrouter.router.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -13,6 +14,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import com.paymentrouter.router.client.DfspAAdapter;
+import com.paymentrouter.router.client.DfspBAdapter;
 import com.paymentrouter.router.dto.QuoteRequest;
 import com.paymentrouter.router.dto.QuoteResponse;
 import com.paymentrouter.router.entity.Provider;
@@ -24,7 +27,7 @@ import com.paymentrouter.router.strategy.DfspStrategyFactory;
 
 /**
  * Unit test for quote calculation with the real DFSP strategies.
- * Validation is mocked, so no database is needed.
+ * Validation is mocked, so no database is needed. Quotes never call adapters.
  */
 @ExtendWith(MockitoExtension.class)
 class QuoteServiceTest {
@@ -39,7 +42,9 @@ class QuoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        DfspStrategyFactory factory = new DfspStrategyFactory(List.of(new DfspAStrategy(), new DfspBStrategy()));
+        DfspStrategyFactory factory = new DfspStrategyFactory(List.of(
+                new DfspAStrategy(mock(DfspAAdapter.class)),
+                new DfspBStrategy(mock(DfspBAdapter.class))));
         quoteService = new QuoteService(paymentRequestValidator, factory);
     }
 

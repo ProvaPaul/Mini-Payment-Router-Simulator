@@ -3,6 +3,8 @@ package com.paymentrouter.router.strategy;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+import com.paymentrouter.router.client.DfspTransferRequest;
+import com.paymentrouter.router.client.DfspTransferResult;
 import com.paymentrouter.router.entity.Provider;
 
 /**
@@ -41,4 +43,14 @@ public interface DfspStrategy {
                 .divide(ONE_HUNDRED, MONEY_SCALE, RoundingMode.HALF_UP);
         return new QuoteCalculation(scaledAmount, feePercentage, feeAmount, scaledAmount.add(feeAmount));
     }
+
+    /**
+     * Sends the transfer to this DFSP through the DFSP's adapter.
+     *
+     * @param request     provider-neutral transfer data
+     * @param destination destination provider; its base URL is used for the call
+     * @return the DFSP's decision
+     * @throws com.paymentrouter.router.exception.DfspCommunicationException if the DFSP cannot be reached
+     */
+    DfspTransferResult executeTransfer(DfspTransferRequest request, Provider destination);
 }
