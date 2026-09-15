@@ -142,7 +142,7 @@ the container's own filesystem.
 ## App flow
 
 ```mermaid
-flowchart TD
+flowchart LR
     Start([Open the app]) --> Load["Load providers<br/>GET /api/providers"]
     Load --> Form["Fill form:<br/>source, destination, amount"]
 
@@ -174,8 +174,8 @@ flowchart TD
     StatusSuccess --> Save["Save transaction in PostgreSQL<br/>(pricing snapshot, ALWAYS)"]
     StatusFailed --> Save
 
-    Save --> LogIt["Write to payment-router.log<br/>INFO success / WARN or ERROR failed"]
-    LogIt --> ShowResult["Show result card:<br/>SUCCESS (green) or FAILED (red)"]
+    Save --> LogIt["Write to payment-router.log"]
+    LogIt --> ShowResult["Show result card: <br/>SUCCESS or FAILED"]
 
     ShowResult --> NewTransfer["Click 'New transfer'"]
     NewTransfer --> Form
