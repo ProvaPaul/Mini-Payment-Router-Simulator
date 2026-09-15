@@ -81,7 +81,9 @@ current `fee_percentage`.
 - A result card showing the recorded transaction: status badge, transaction ID, DFSP message and pricing snapshot. (A separate transaction history page is not part of the current UI.)
 - It loads the provider dropdown options from the API, so it has no hard-coded provider list.
 - It holds **no business logic**. Fee calculation and validation belong to the backend. (Simple UI checks are allowed for user experience only.)
-- In Docker, **Nginx** serves the built static files and reverse-proxies `/api` to `payment-router:8080`. The browser sees one origin, so no CORS configuration is needed.
+- In Docker, **Nginx** serves the built static files and reverse-proxies `/api` to `payment-router:8080`. In local development the **Vite dev server** proxies `/api` to `http://localhost:8080` the same way. The browser sees one origin, so CORS is not involved.
+- The router also has a narrow **CORS allow-list** (`app.cors.allowed-origins`, default `http://localhost:5173,http://localhost:4173`: `/api/**`, GET/POST, `Content-Type` only). It is used only when the frontend calls the router directly through `VITE_API_BASE_URL`.
+- **A proxy must keep the browser's `Host` header** (Vite: `changeOrigin: false`; Nginx: `proxy_set_header Host $host`). Browsers send an `Origin` header on POST. If the proxy rewrites `Host` to the router's address, Spring sees Origin ≠ Host, treats the call as cross-origin, and rejects POSTs from origins outside the allow-list with 403 "Invalid CORS request".
 
 ### 3.2 Payment Router (`payment-router`) — the main backend
 - Exposes the public REST API.
