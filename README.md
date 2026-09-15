@@ -46,30 +46,7 @@ Two properties are load-bearing and worth stating up front:
 
 ## Architecture
 
-```
- Browser ──► http://localhost:3000
-                   │
-┌──────────────────┼────────────────── Docker Compose network ───────────────────────────┐
-│                  ▼                                                                      │
-│   ┌──────────────────────┐   /api/*  → http://payment-router:8080                       │
-│   │ frontend             │───────────────────────┐                                      │
-│   │ React build + Nginx  │                       ▼                                      │
-│   └──────────────────────┘        ┌─────────────────────────────┐                       │
-│                                   │ payment-router (Spring Boot)│──► logs/payment-router.log
-│                                   │ Controller → Service →      │                       │
-│                                   │ Strategy → Adapter          │                       │
-│                                   └───┬─────────────┬───────┬───┘                       │
-│                    JDBC (JPA)         │  REST       │       │ REST                      │
-│                                       ▼             ▼       ▼                           │
-│                         ┌──────────────────┐ ┌──────────┐ ┌──────────┐                  │
-│                         │ postgres         │ │ dfsp-a   │ │ dfsp-b   │                  │
-│                         │ providers,       │ │ :8081    │ │ :8082    │                  │
-│                         │ transactions     │ └──────────┘ └──────────┘                  │
-│                         └────────┬─────────┘                                            │
-└──────────────────────────────────┼──────────────────────────────────────────────────────┘
-                                   ▼
-                          volume: pgdata
-```
+![Architecture: browser to frontend (React + Nginx), to payment-router (Spring Boot: Controller → Service → Strategy → Adapter), to postgres, dfsp-a and dfsp-b, all inside one Docker Compose network](architecture.png)
 
 - The browser talks only to `frontend`; Nginx forwards `/api/*` to `payment-router`, so
   the browser sees a single origin.
