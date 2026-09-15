@@ -1,10 +1,12 @@
 package com.paymentrouter.router.repository;
 
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.paymentrouter.router.entity.Provider;
+import com.paymentrouter.router.entity.ProviderStatus;
 
 /**
  * Data access for {@link Provider}.
@@ -23,4 +25,11 @@ public interface ProviderRepository extends JpaRepository<Provider, Long> {
      * @return the provider, or an empty Optional when no provider has this code
      */
     Optional<Provider> findByCode(String code);
+
+    /**
+     * Providers with the given status, ordered by code.
+     * <p>
+     * Derived query: {@code select p from Provider p where p.status = :status order by p.code asc}
+     */
+    List<Provider> findByStatusOrderByCodeAsc(ProviderStatus status);
 }

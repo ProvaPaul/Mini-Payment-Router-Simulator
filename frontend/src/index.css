@@ -1,15 +1,224 @@
 :root {
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
-  color: #1f2937;
-  background: #f9fafb;
+  --bg: #f4f6f8;
+  --surface: #ffffff;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --primary: #0f766e;
+  --primary-hover: #115e59;
+  --success-bg: #dcfce7;
+  --success-text: #166534;
+  --failed-bg: #fee2e2;
+  --failed-border: #fecaca;
+  --failed-text: #991b1b;
+
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--text);
+  background: var(--bg);
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
 }
 
-.app {
-  max-width: 960px;
+.page {
+  max-width: 640px;
   margin: 0 auto;
-  padding: 24px 16px;
+  padding: 32px 16px 48px;
+}
+
+.page-header h1 {
+  margin: 0 0 4px;
+  font-size: 1.75rem;
+}
+
+.page-header p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.content {
+  display: grid;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.card {
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.card h2 {
+  margin: 0 0 16px;
+  font-size: 1.125rem;
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 480px) {
+  .field-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 16px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.field select,
+.field input {
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 400;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.field select:focus,
+.field input:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+.field-error {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: var(--failed-text);
+}
+
+.button {
+  padding: 10px 18px;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.button.primary {
+  width: 100%;
+  color: #ffffff;
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.button.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.route {
+  margin: -8px 0 16px;
+  color: var(--muted);
+}
+
+.summary {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.summary div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.summary dt {
+  color: var(--muted);
+}
+
+.summary dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.summary .total {
+  padding-top: 8px;
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+}
+
+.summary .total dt {
+  color: var(--text);
+}
+
+.hint {
+  margin: 0 0 16px;
+  font-size: 0.8125rem;
+  color: var(--muted);
+}
+
+.alert {
+  padding: 12px 16px;
+  color: var(--failed-text);
+  background: var(--failed-bg);
+  border: 1px solid var(--failed-border);
+  border-radius: 8px;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.result-header h2 {
+  margin: 0;
+}
+
+.badge {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+}
+
+.badge-success {
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.badge-failed {
+  color: var(--failed-text);
+  background: var(--failed-bg);
+}
+
+.result-message {
+  margin: 0 0 16px;
+}
+
+.mono {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.8125rem;
+  word-break: break-all;
 }

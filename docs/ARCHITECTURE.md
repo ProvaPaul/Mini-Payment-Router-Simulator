@@ -19,7 +19,7 @@ In this simulator:
 - **DFSP-A** and **DFSP-B** are small dummy Spring Boot services.
 - The router keeps the provider configuration (including fee percentage) and
   the transaction history in **PostgreSQL**.
-- A **React** UI lets a user request quotes, make transfers and see history.
+- A **React** UI lets a user request quotes, make transfers and see each transfer's result.
 
 **Pricing rule:** the fee is calculated from the **destination provider's**
 current `fee_percentage`.
@@ -78,7 +78,7 @@ current `fee_percentage`.
 - A form with **source provider**, **destination provider** and **amount**.
 - A **Get Quote** button shows the fee percentage, fee amount and total amount.
 - A **Transfer** button runs the transfer and shows SUCCESS or FAILED.
-- A **transaction history** table showing the saved pricing snapshot of each transaction.
+- A result card showing the recorded transaction: status badge, transaction ID, DFSP message and pricing snapshot. (A separate transaction history page is not part of the current UI.)
 - It loads the provider dropdown options from the API, so it has no hard-coded provider list.
 - It holds **no business logic**. Fee calculation and validation belong to the backend. (Simple UI checks are allowed for user experience only.)
 - In Docker, **Nginx** serves the built static files and reverse-proxies `/api` to `payment-router:8080`. The browser sees one origin, so no CORS configuration is needed.
@@ -252,7 +252,7 @@ A factory there would add a class with no benefit.
 | POST   | `/api/quotes`       | Calculate a quote (nothing is saved)                 |
 | POST   | `/api/transfers`    | Execute a transfer (a transaction is saved)          |
 | GET    | `/api/providers`    | List providers (UI dropdowns)                        |
-| GET    | `/api/transactions` | List saved transactions, newest first (UI history)   |
+| GET    | `/api/transactions` | *Not implemented:* planned history listing (not used by the current UI) |
 
 ### 6.1 Quote
 `POST /api/quotes`
