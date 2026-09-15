@@ -46,7 +46,7 @@ Two properties are load-bearing and worth stating up front:
 
 ## Architecture
 
-![Architecture: browser to frontend (React + Nginx), to payment-router (Spring Boot: Controller → Service → Strategy → Adapter), to postgres, dfsp-a and dfsp-b, all inside one Docker Compose network](architecture.png)
+![Architecture: browser to frontend (React + Nginx), to payment-router (Spring Boot: Controller → Service → Strategy → Adapter), to postgres, dfsp-a and dfsp-b, all inside one Docker Compose network](architecture-diagram.png)
 
 - The browser talks only to `frontend`; Nginx forwards `/api/*` to `payment-router`, so
   the browser sees a single origin.
