@@ -556,7 +556,26 @@ Mini Payment Router Simulator/
 
 ---
 
-## 12. Why This Architecture Fits the Assignment
+## 12. Testing
+
+| Level | Where | What it proves | Needs |
+|-------|-------|----------------|-------|
+| Unit | `PaymentRequestValidatorTest`, `QuoteServiceTest`, `TransferServiceTest`, `DfspStrategyFactoryTest` | Validation rules, destination-fee pricing and rounding, routing to the right strategy, SUCCESS/FAILED/timeout handling | nothing |
+| Adapter contract | `DfspAAdapterTest`, `DfspBAdapterTest` (`MockRestServiceServer`) | Each DFSP's URL, field names, units (taka vs paisa) and result mapping | nothing |
+| Web layer | `GlobalExceptionHandlerTest`, `ProviderControllerTest`, `CorsConfigTest`, `DtoJsonMappingTest` | HTTP status codes, consistent error JSON, CORS allow-list, JSON shape | nothing |
+| Repository | `ProviderRepositoryTest`, `TransactionRepositoryTest` | Constraints and queries against the real schema | PostgreSQL |
+| Integration | `TransferPersistenceIntegrationTest` | Transaction rows, foreign keys and pricing snapshot in PostgreSQL | PostgreSQL |
+| API end-to-end | `PaymentApiIntegrationTest` | Real HTTP API → real `RestClient` → fake DFSP HTTP servers → PostgreSQL → log file: valid quote, invalid amount, same provider, unknown provider, A→B, B→A, fee snapshot, DFSP rejection, DFSP unreachable, file logging | PostgreSQL |
+| DFSP services | `dfsp-a`, `dfsp-b` controller and service tests | Each dummy DFSP's accept/reject rule and API | nothing |
+| Frontend | `frontend/src/api/paymentRouterApi.test.js` (Vitest) | Relative `/api` URLs, JSON request body, error JSON → `ApiError`, unreachable router | nothing |
+| Docker smoke | `scripts/smoke-test.sh` | Compose services running; browser path through Nginx (with `Origin` header) to router, DFSPs, PostgreSQL rows and the `./logs` file | running Compose stack |
+
+- Router tests use the local development database (`localhost:5433`). Tests that write run inside a rolled-back transaction, so they leave no rows behind.
+- Run `./mvnw test` in each backend, `npm test` in `frontend`, and `bash scripts/smoke-test.sh` after `docker compose up --build -d` (set `BASE_URL=http://localhost:<port>` if `FRONTEND_PORT` was changed).
+
+---
+
+## 13. Why This Architecture Fits the Assignment
 
 | Assignment requirement              | How the architecture covers it                                     |
 |-------------------------------------|---------------------------------------------------------------------|
@@ -568,7 +587,7 @@ Mini Payment Router Simulator/
 | Frontend + backend                  | React (Nginx) + Spring Boot                                         |
 | Explainable design                  | Layered structure + Strategy, Adapter, and one justified Factory    |
 
-## 13. Intentionally Not Included
+## 14. Intentionally Not Included
 
 | Not included                                   | Reason                                                          |
 |------------------------------------------------|-----------------------------------------------------------------|
