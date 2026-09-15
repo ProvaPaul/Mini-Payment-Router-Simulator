@@ -11,8 +11,8 @@ import org.springframework.stereotype.Component;
  * Returns the {@link DfspStrategy} for a provider code.
  * <p>
  * Spring creates the strategy beans and injects them here as a list; this factory only
- * SELECTS the right one at runtime. Every service that needs a DFSP strategy (quotes now,
- * transfers next) uses this single lookup instead of repeating it.
+ * SELECTS the right one at runtime. Every service that needs a DFSP strategy (QuoteService and
+ * TransferService) uses this single lookup instead of repeating it.
  */
 @Component
 public class DfspStrategyFactory {

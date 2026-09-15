@@ -5,6 +5,23 @@ function FieldError({ message }) {
   return <span className="field-error">{message}</span>
 }
 
+/** Provider dropdown, used for both the source and the destination provider. */
+function ProviderSelect({ label, field, value, providers, error, disabled, onChange }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(field, event.target.value)} disabled={disabled} required>
+        {providers.map((provider) => (
+          <option key={provider.code} value={provider.code}>
+            {provider.name}
+          </option>
+        ))}
+      </select>
+      <FieldError message={error} />
+    </label>
+  )
+}
+
 /**
  * Source, destination and amount inputs. Holds no state of its own:
  * values come in through props and every change is reported to the parent.
@@ -15,39 +32,24 @@ function TransferForm({ providers, form, fieldErrors, disabled, loading, onChang
       <h2>New transfer</h2>
 
       <div className="field-row">
-        <label className="field">
-          <span>From</span>
-          <select
-            value={form.sourceProviderCode}
-            onChange={(event) => onChange('sourceProviderCode', event.target.value)}
-            disabled={disabled}
-            required
-          >
-            {providers.map((provider) => (
-              <option key={provider.code} value={provider.code}>
-                {provider.name}
-              </option>
-            ))}
-          </select>
-          <FieldError message={fieldErrors.sourceProviderCode} />
-        </label>
-
-        <label className="field">
-          <span>To</span>
-          <select
-            value={form.destinationProviderCode}
-            onChange={(event) => onChange('destinationProviderCode', event.target.value)}
-            disabled={disabled}
-            required
-          >
-            {providers.map((provider) => (
-              <option key={provider.code} value={provider.code}>
-                {provider.name}
-              </option>
-            ))}
-          </select>
-          <FieldError message={fieldErrors.destinationProviderCode} />
-        </label>
+        <ProviderSelect
+          label="From"
+          field="sourceProviderCode"
+          value={form.sourceProviderCode}
+          providers={providers}
+          error={fieldErrors.sourceProviderCode}
+          disabled={disabled}
+          onChange={onChange}
+        />
+        <ProviderSelect
+          label="To"
+          field="destinationProviderCode"
+          value={form.destinationProviderCode}
+          providers={providers}
+          error={fieldErrors.destinationProviderCode}
+          disabled={disabled}
+          onChange={onChange}
+        />
       </div>
 
       <label className="field">

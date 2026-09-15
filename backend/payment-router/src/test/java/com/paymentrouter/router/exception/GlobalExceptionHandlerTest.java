@@ -51,6 +51,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    void amountTooLargeToStoreReturns400WithFieldError() throws Exception {
+        postJson("/api/transfers", """
+                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_B","amount":9999999999.99}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(consistentShape(400, "Bad Request"))
+                .andExpect(jsonPath("$.fieldErrors.amount").value("amount must have at most 9 digits and 2 decimal places"));
+    }
+
+    @Test
     void nonNumericAmountReturns400MalformedRequest() throws Exception {
         postJson("/api/transfers", """
                 {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_B","amount":"abc"}

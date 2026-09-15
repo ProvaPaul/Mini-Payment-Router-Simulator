@@ -4,7 +4,7 @@ import java.time.Instant;
 import java.util.Map;
 
 /**
- * Error body returned for invalid requests.
+ * Error body returned for every failed request (400, 404, 405, 415 and 500).
  *
  * @param timestamp   when the error happened
  * @param status      HTTP status code, e.g. 400

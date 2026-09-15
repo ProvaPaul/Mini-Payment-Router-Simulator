@@ -13,7 +13,7 @@ RUN mvn -B -q -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-COPY --from=build /workspace/target/dfsp-a-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/target/*.jar app.jar
 
 EXPOSE 8081
 ENTRYPOINT ["java", "-jar", "app.jar"]

@@ -26,6 +26,7 @@ public record QuoteRequest(
 
         @NotNull(message = "amount is required")
         @Positive(message = "amount must be greater than zero")
-        @Digits(integer = 10, fraction = 2, message = "amount must have at most 10 digits and 2 decimal places")
+        // 9 integer digits, so amount + fee still fits the NUMERIC(12,2) columns of the transactions table.
+        @Digits(integer = 9, fraction = 2, message = "amount must have at most 9 digits and 2 decimal places")
         BigDecimal amount) {
 }

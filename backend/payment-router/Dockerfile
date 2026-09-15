@@ -14,7 +14,7 @@ RUN mvn -B -q -DskipTests package
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 
-COPY --from=build /workspace/target/payment-router-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /workspace/target/*.jar app.jar
 
 # logging.file.name=logs/payment-router.log resolves to /app/logs/payment-router.log
 EXPOSE 8080

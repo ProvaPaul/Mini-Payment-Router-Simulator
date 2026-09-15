@@ -20,7 +20,8 @@ import com.paymentrouter.router.repository.ProviderRepository;
  * Existing rows are never overwritten, so configuration changed later in the
  * database (for example a new fee percentage) survives application restarts.
  * <p>
- * The values below are only the INITIAL configuration. At runtime the router
+ * The values come from application.properties (dfsp.*.base-url, dfsp.*.fee-percentage) and are
+ * only the INITIAL configuration. At runtime the router
  * always reads provider configuration from the providers table.
  */
 @Component
@@ -31,20 +32,26 @@ public class ProviderDataInitializer implements ApplicationRunner {
     private final ProviderRepository providerRepository;
     private final String dfspABaseUrl;
     private final String dfspBBaseUrl;
+    private final BigDecimal dfspAFeePercentage;
+    private final BigDecimal dfspBFeePercentage;
 
     public ProviderDataInitializer(
             ProviderRepository providerRepository,
             @Value("${dfsp.a.base-url}") String dfspABaseUrl,
-            @Value("${dfsp.b.base-url}") String dfspBBaseUrl) {
+            @Value("${dfsp.b.base-url}") String dfspBBaseUrl,
+            @Value("${dfsp.a.fee-percentage}") BigDecimal dfspAFeePercentage,
+            @Value("${dfsp.b.fee-percentage}") BigDecimal dfspBFeePercentage) {
         this.providerRepository = providerRepository;
         this.dfspABaseUrl = dfspABaseUrl;
         this.dfspBBaseUrl = dfspBBaseUrl;
+        this.dfspAFeePercentage = dfspAFeePercentage;
+        this.dfspBFeePercentage = dfspBFeePercentage;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        seedIfMissing("DFSP_A", "DFSP-A", dfspABaseUrl, new BigDecimal("1.00"));
-        seedIfMissing("DFSP_B", "DFSP-B", dfspBBaseUrl, new BigDecimal("1.50"));
+        seedIfMissing("DFSP_A", "DFSP-A", dfspABaseUrl, dfspAFeePercentage);
+        seedIfMissing("DFSP_B", "DFSP-B", dfspBBaseUrl, dfspBFeePercentage);
     }
 
     private void seedIfMissing(String code, String name, String baseUrl, BigDecimal feePercentage) {

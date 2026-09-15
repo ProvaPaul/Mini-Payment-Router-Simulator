@@ -1,8 +1,7 @@
 # Mini Payment Router Simulator — Architecture
 
-> Status: **design document (Step 01)**.
-> It describes the target architecture. No business logic is implemented yet.
-> Values marked *planned* (ports, limits, timeouts) may be adjusted during implementation.
+> Status: **implemented**. This document describes the architecture as built.
+> See the [README](../README.md) for setup, usage and example requests.
 
 ---
 
@@ -77,7 +76,7 @@ current `fee_percentage`.
 ### 3.1 React Frontend (`frontend`)
 - A form with **source provider**, **destination provider** and **amount**.
 - A **Get Quote** button shows the fee percentage, fee amount and total amount.
-- A **Transfer** button runs the transfer and shows SUCCESS or FAILED.
+- A **Confirm transfer** button, shown with the quote, runs the transfer and shows SUCCESS or FAILED.
 - A result card showing the recorded transaction: status badge, transaction ID, DFSP message and pricing snapshot. (A separate transaction history page is not part of the current UI.)
 - It loads the provider dropdown options from the API, so it has no hard-coded provider list.
 - It holds **no business logic**. Fee calculation and validation belong to the backend. (Simple UI checks are allowed for user experience only.)
@@ -96,14 +95,14 @@ current `fee_percentage`.
 
 ### 3.3 DFSP-A (`dfsp-a`) — dummy provider
 - A small, stateless Spring Boot service with **one transfer endpoint** in *its own* API format.
-- Applies a simple simulated rule to **accept or reject** (planned: reject amounts above 50,000).
+- Applies a simple simulated rule to **accept or reject** (rejects amounts above 50,000.00 taka, set by `dfsp-a.max-transfer-amount`).
 - Returns a reference ID and a status.
 - No database, no fee calculation (the router owns pricing), no authentication. Logs go to the console.
 
 ### 3.4 DFSP-B (`dfsp-b`) — dummy provider
 - Same role as DFSP-A, but with a **deliberately different API format**:
   different URL, field names, money unit (paisa) and status words.
-- Planned simulated rule: reject amounts above 25,000.
+- Simulated rule: rejects amounts above 2,500,000 paisa (25,000.00 taka), set by `dfsp-b.max-payment-amount-in-paisa`.
 - The different format is what gives the **Adapter Pattern** a real purpose.
 
 | Aspect            | DFSP-A                                   | DFSP-B                                        |
@@ -131,24 +130,26 @@ Controller  →  Service  →  Strategy  →  Adapter (DfspClient)  →  Dummy D
                   └──────→  Repository  →  PostgreSQL
 ```
 
-Planned packages:
+Packages:
 
 ```
 backend/payment-router/src/main/java/com/paymentrouter/router/
 ├── PaymentRouterApplication.java
 ├── controller/   QuoteController, TransferController,
-│                 ProviderController, TransactionController
+│                 ProviderController, StatusController
 ├── dto/          QuoteRequest, QuoteResponse, TransferRequest,
-│                 TransferResponse, ProviderResponse, TransactionResponse, ErrorResponse
-├── service/      PaymentRequestValidator, PaymentProviders, QuoteService, TransferService
+│                 TransferResponse, ProviderResponse, StatusResponse, ErrorResponse
+├── service/      PaymentRequestValidator, PaymentProviders, QuoteService,
+│                 TransferService, ProviderService
 ├── strategy/     DfspStrategy, DfspAStrategy, DfspBStrategy,
 │                 DfspStrategyFactory, QuoteCalculation
 ├── client/       DfspClient, DfspAAdapter, DfspBAdapter,
 │                 DfspTransferRequest, DfspTransferResult
 ├── entity/       Provider, Transaction, ProviderStatus, TransactionStatus
 ├── repository/   ProviderRepository, TransactionRepository
-├── exception/    custom exceptions, GlobalExceptionHandler
-└── config/       HTTP client configuration
+├── exception/    InvalidPaymentRequestException, DfspCommunicationException,
+│                 GlobalExceptionHandler
+└── config/       DfspClientConfig, CorsConfig, ProviderDataInitializer
 ```
 
 | Layer / Component     | Responsibility                                                            | Must NOT do                      |
@@ -221,16 +222,17 @@ classDiagram
 - Each adapter converts the common request into the DFSP's JSON, sends it to the
   provider's `base_url` (read from the `providers` table), and converts the reply back.
 - Network errors (DFSP down, timeout) become a **`DfspCommunicationException`**,
-  which the transfer service handles.
+  which the transfer service handles. Timeouts are configurable:
+  `dfsp.client.connect-timeout=3s`, `dfsp.client.read-timeout=5s`.
 
 ### 5.3 Factory — used, because lookup-by-code is genuinely needed
 
 `DfspStrategyFactory` answers one question: *"Which strategy handles destination `DFSP_B`?"*
 
-> **Decision (Step 13):** implemented as a *selection* factory. Spring DI already creates
+> **Decision:** implemented as a *selection* factory. Spring DI already creates
 > the strategy objects, so the factory does not call `new`. It indexes the injected
 > strategies by provider code, fails at startup on duplicate codes, and throws when a
-> provider has no strategy. `QuoteService` and `TransferService` (Step 17) both use it,
+> provider has no strategy. `QuoteService` and `TransferService` both use it,
 > so this selection logic is written once.
 
 - Spring injects **all** `DfspStrategy` beans as a `List`.
@@ -254,7 +256,7 @@ A factory there would add a class with no benefit.
 | POST   | `/api/quotes`       | Calculate a quote (nothing is saved)                 |
 | POST   | `/api/transfers`    | Execute a transfer (a transaction is saved)          |
 | GET    | `/api/providers`    | List providers (UI dropdowns)                        |
-| GET    | `/api/transactions` | *Not implemented:* planned history listing (not used by the current UI) |
+| GET    | `/api/status`       | Service status (used by the Docker healthcheck)      |
 
 ### 6.1 Quote
 `POST /api/quotes`
@@ -287,7 +289,7 @@ A factory there would add a class with no benefit.
   "feeAmount": 15.00,
   "totalAmount": 1015.00,
   "status": "SUCCESS",
-  "message": "Accepted by DFSP-B (ref B-PAY-000123)",
+  "message": "ACCEPTED (ref B-PAY-000123)",
   "createdAt": "2026-09-14T10:01:12Z"
 }
 ```
@@ -324,7 +326,7 @@ It is saved and returned as a `FAILED` transaction.
 | Rule                                        | Where                                     | Mechanism                          |
 |---------------------------------------------|-------------------------------------------|------------------------------------|
 | Amount is required and greater than zero    | Request DTO                               | `@NotNull`, `@Positive` + `@Valid` |
-| Amount has at most 2 decimal places         | Request DTO                               | `@Digits(integer = 10, fraction = 2)` |
+| At most 9 integer digits, 2 decimal places  | Request DTO                               | `@Digits(integer = 9, fraction = 2)` |
 | Source provider is required                 | Request DTO                               | `@NotBlank`                        |
 | Destination provider is required            | Request DTO                               | `@NotBlank`                        |
 | Source and destination are not the same     | `PaymentRequestValidator`                 | Business check → 400               |
@@ -334,6 +336,8 @@ Request validation runs first (`@Valid`), so an invalid request never reaches a 
 `GlobalExceptionHandler` (`@RestControllerAdvice`) converts `MethodArgumentNotValidException`
 (field errors) and `InvalidPaymentRequestException` (business rules) into the error JSON above.
 Quote and transfer share the same business checks through `PaymentRequestValidator`.
+The 9-digit limit keeps `amount + fee` inside the `NUMERIC(12,2)` columns, so a very large amount
+is rejected with 400 instead of failing when the transaction is saved.
 
 ---
 
@@ -388,7 +392,7 @@ sequenceDiagram
     participant D as dfsp-b
     participant DB as PostgreSQL
 
-    U->>FE: click "Transfer"
+    U->>FE: click "Confirm transfer"
     FE->>TC: POST /api/transfers
     TC->>TC: @Valid
     TC->>TS: executeTransfer(request)
@@ -409,7 +413,7 @@ sequenceDiagram
     TS->>TS: log result
     TS-->>TC: TransferResponse
     TC-->>FE: 201 Created
-    FE-->>U: show status, refresh history
+    FE-->>U: show status and transaction details
 ```
 
 Step by step:
@@ -470,7 +474,8 @@ are never overwritten, so a fee changed later in the database survives restarts.
 
 The base URL comes from `DFSP_A_BASE_URL` / `DFSP_B_BASE_URL`, falling back to
 the local default. Fee percentages are never hard-coded in calculation logic;
-quotes and transfers always read them from `providers`.
+quotes and transfers always read them from `providers`. The initial values come from
+`dfsp.a.fee-percentage` and `dfsp.b.fee-percentage` in `application.properties`.
 
 **Responsibilities**
 - `providers` = **current configuration**. It can change, for example DFSP-B moving from 1.5% to 2%.
@@ -539,7 +544,7 @@ the DFSPs minimal.
 - DFSP addresses come from `providers.base_url`. In Docker they are seeded as service names through `DFSP_A_BASE_URL=http://dfsp-a:8081` and `DFSP_B_BASE_URL=http://dfsp-b:8082`.
 - Start everything with `docker compose up --build`, then open `http://localhost:3000`.
 
-Planned repository layout:
+Repository layout:
 
 ```
 Mini Payment Router Simulator/
@@ -549,6 +554,7 @@ Mini Payment Router Simulator/
 │   ├── dfsp-a/               Dummy DFSP-A (Maven project)
 │   └── dfsp-b/               Dummy DFSP-B (Maven project)
 ├── docs/ARCHITECTURE.md
+├── scripts/smoke-test.sh     Smoke test for the running Compose stack
 ├── logs/                     Generated at runtime (git-ignored)
 ├── docker-compose.yml
 └── README.md
@@ -593,6 +599,7 @@ Mini Payment Router Simulator/
 |------------------------------------------------|-----------------------------------------------------------------|
 | Authentication, users, JWT, Spring Security    | Not part of payment routing; explicitly excluded               |
 | Quotes table                                   | Quotes are recalculable, not business records                   |
+| Transaction history endpoint and page          | Not required; each transfer is shown in its result card and stored in `transactions` |
 | Kafka / queues, Redis, Kubernetes              | Synchronous REST between 3 services is enough                   |
 | DFSP databases, balances, accounts             | DFSPs are simulators; a simple accept/reject rule is enough     |
 | Retries, circuit breakers, reconciliation      | Production resilience concerns, beyond a fresher assessment     |
