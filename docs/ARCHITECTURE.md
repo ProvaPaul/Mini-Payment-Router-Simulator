@@ -493,7 +493,10 @@ A → B transaction for 1000 still shows **1.5% / 15 / 1015**. Reading the fee f
 ## 10. Logging
 
 - Uses Spring Boot's default **SLF4J + Logback**. File output is enabled with `logging.file.name`.
-- On the host the file is `logs/payment-router.log` (inside the container `/app/logs/payment-router.log`, bind-mounted to `./logs`).
+- `logging.file.name=logs/payment-router.log` is relative to the working directory: `backend/payment-router/logs/payment-router.log` when run locally, `/app/logs/payment-router.log` inside the container (bind-mounted to `./logs` on the host).
+- Logs go to both the console and the file. The file rolls at 10 MB, and 7 days of history are kept.
+- Test runs write to `target/test-logs/payment-router-test.log` (Surefire system property), so they never mix with application logs.
+- DFSP adapters log the DFSP-specific request and response (`DFSP-B request: POST ... DfspBPaymentRequest[...]`).
 
 | Event                          | Level | Example content                                   |
 |--------------------------------|-------|---------------------------------------------------|

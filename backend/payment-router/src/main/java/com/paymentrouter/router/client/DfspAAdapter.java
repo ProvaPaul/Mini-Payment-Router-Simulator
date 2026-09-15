@@ -2,6 +2,8 @@ package com.paymentrouter.router.client;
 
 import java.math.BigDecimal;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -23,6 +25,8 @@ import com.paymentrouter.router.exception.DfspCommunicationException;
 @Component
 public class DfspAAdapter implements DfspClient {
 
+    private static final Logger log = LoggerFactory.getLogger(DfspAAdapter.class);
+
     static final String TRANSFER_PATH = "/api/dfsp-a/transfers";
 
     private final RestClient restClient;
@@ -38,11 +42,13 @@ public class DfspAAdapter implements DfspClient {
                 request.sourceProviderCode(),
                 request.amount(),
                 request.feeAmount());
+        String url = baseUrl + TRANSFER_PATH;
 
+        log.info("DFSP-A request: POST {} {}", url, body);
         DfspATransferResponse response;
         try {
             response = restClient.post()
-                    .uri(baseUrl + TRANSFER_PATH)
+                    .uri(url)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(body)
                     .retrieve()
@@ -50,6 +56,7 @@ public class DfspAAdapter implements DfspClient {
         } catch (RestClientException exception) {
             throw new DfspCommunicationException("DFSP-A request failed: " + exception.getMessage(), exception);
         }
+        log.info("DFSP-A response: {}", response);
 
         return toResult(response);
     }
