@@ -23,7 +23,7 @@ import com.paymentrouter.router.entity.ProviderStatus;
 import com.paymentrouter.router.exception.InvalidPaymentRequestException;
 import com.paymentrouter.router.strategy.DfspAStrategy;
 import com.paymentrouter.router.strategy.DfspBStrategy;
-import com.paymentrouter.router.strategy.DfspStrategyFactory;
+import com.paymentrouter.router.strategy.DfspStrategy;
 
 /**
  * Unit test for quote calculation with the real DFSP strategies.
@@ -42,10 +42,10 @@ class QuoteServiceTest {
 
     @BeforeEach
     void setUp() {
-        DfspStrategyFactory factory = new DfspStrategyFactory(List.of(
+        List<DfspStrategy> strategies = List.of(
                 new DfspAStrategy(mock(DfspAAdapter.class)),
-                new DfspBStrategy(mock(DfspBAdapter.class))));
-        quoteService = new QuoteService(paymentRequestValidator, factory);
+                new DfspBStrategy(mock(DfspBAdapter.class)));
+        quoteService = new QuoteService(paymentRequestValidator, strategies);
     }
 
     @Test
@@ -86,11 +86,24 @@ class QuoteServiceTest {
 
     @Test
     void propagatesValidationFailure() {
-        when(paymentRequestValidator.validate("DFSP_A", "DFSP_A"))
-                .thenThrow(new InvalidPaymentRequestException("Source and destination provider cannot be the same"));
+        when(paymentRequestValidator.validate("DFSP_A", "DFSP_X"))
+                .thenThrow(new InvalidPaymentRequestException("Provider not found: DFSP_X"));
 
-        assertThatThrownBy(() -> quoteService.calculateQuote(new QuoteRequest("DFSP_A", "DFSP_A", new BigDecimal("1000"))))
+        assertThatThrownBy(() -> quoteService.calculateQuote(new QuoteRequest("DFSP_A", "DFSP_X", new BigDecimal("1000"))))
                 .isInstanceOf(InvalidPaymentRequestException.class);
+    }
+
+    @Test
+    void allowsSameSourceAndDestinationProvider() {
+        when(paymentRequestValidator.validate("DFSP_A", "DFSP_A")).thenReturn(new PaymentProviders(dfspA, dfspA));
+
+        QuoteResponse quote = quoteService.calculateQuote(new QuoteRequest("DFSP_A", "DFSP_A", new BigDecimal("1000")));
+
+        assertThat(quote.sourceProviderCode()).isEqualTo("DFSP_A");
+        assertThat(quote.destinationProviderCode()).isEqualTo("DFSP_A");
+        assertThat(quote.feePercentage()).isEqualTo(new BigDecimal("1.00"));
+        assertThat(quote.feeAmount()).isEqualTo(new BigDecimal("10.00"));
+        assertThat(quote.totalAmount()).isEqualTo(new BigDecimal("1010.00"));
     }
 
     @Test

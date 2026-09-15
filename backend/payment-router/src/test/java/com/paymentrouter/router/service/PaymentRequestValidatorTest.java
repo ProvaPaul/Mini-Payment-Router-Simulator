@@ -2,7 +2,6 @@ package com.paymentrouter.router.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
@@ -45,12 +44,14 @@ class PaymentRequestValidatorTest {
     }
 
     @Test
-    void rejectsSameSourceAndDestinationWithoutQueryingTheDatabase() {
-        assertThatThrownBy(() -> validator.validate("DFSP_A", "DFSP_A"))
-                .isInstanceOf(InvalidPaymentRequestException.class)
-                .hasMessage("Source and destination provider cannot be the same");
+    void allowsSameSourceAndDestinationProvider() {
+        Provider dfspA = provider("DFSP_A", ProviderStatus.ACTIVE);
+        when(providerRepository.findByCode("DFSP_A")).thenReturn(Optional.of(dfspA));
 
-        verifyNoInteractions(providerRepository);
+        PaymentProviders providers = validator.validate("DFSP_A", "DFSP_A");
+
+        assertThat(providers.source()).isSameAs(dfspA);
+        assertThat(providers.destination()).isSameAs(dfspA);
     }
 
     @Test

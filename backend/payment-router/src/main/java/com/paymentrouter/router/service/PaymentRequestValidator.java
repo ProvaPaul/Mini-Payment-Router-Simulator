@@ -12,6 +12,9 @@ import com.paymentrouter.router.repository.ProviderRepository;
  * <p>
  * Runs after request (field) validation, so both provider codes are already
  * known to be non-blank and the amount is known to be positive.
+ * <p>
+ * Source and destination are allowed to be the same provider: a DFSP can send a
+ * payment to itself, and this is treated like any other transfer.
  */
 @Component
 public class PaymentRequestValidator {
@@ -23,16 +26,12 @@ public class PaymentRequestValidator {
     }
 
     /**
-     * Checks that the providers are different, exist and are active.
+     * Checks that the source and destination providers exist and are active.
      *
      * @return the source and destination providers loaded from the database
      * @throws InvalidPaymentRequestException when a rule is broken
      */
     public PaymentProviders validate(String sourceProviderCode, String destinationProviderCode) {
-        if (sourceProviderCode.equals(destinationProviderCode)) {
-            throw new InvalidPaymentRequestException("Source and destination provider cannot be the same");
-        }
-
         Provider source = findActiveProvider(sourceProviderCode);
         Provider destination = findActiveProvider(destinationProviderCode);
         return new PaymentProviders(source, destination);

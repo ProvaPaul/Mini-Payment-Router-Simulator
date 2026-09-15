@@ -141,8 +141,7 @@ backend/payment-router/src/main/java/com/paymentrouter/router/
 │                 TransferResponse, ProviderResponse, StatusResponse, ErrorResponse
 ├── service/      PaymentRequestValidator, PaymentProviders, QuoteService,
 │                 TransferService, ProviderService
-├── strategy/     DfspStrategy, DfspAStrategy, DfspBStrategy,
-│                 DfspStrategyFactory, QuoteCalculation
+├── strategy/     DfspStrategy, DfspAStrategy, DfspBStrategy, QuoteCalculation
 ├── client/       DfspClient, DfspAAdapter, DfspBAdapter,
 │                 DfspTransferRequest, DfspTransferResult
 ├── entity/       Provider, Transaction, ProviderStatus, TransactionStatus
@@ -155,7 +154,7 @@ backend/payment-router/src/main/java/com/paymentrouter/router/
 | Layer / Component     | Responsibility                                                            | Must NOT do                      |
 |-----------------------|---------------------------------------------------------------------------|----------------------------------|
 | Controller            | Receive HTTP, trigger `@Valid`, call a service, return a response         | Business rules, DB access        |
-| PaymentRequestValidator | Business validation: source ≠ destination, providers exist and are ACTIVE | HTTP calls                     |
+| PaymentRequestValidator | Business validation: providers exist and are ACTIVE (source and destination may be equal) | HTTP calls                     |
 | QuoteService          | Call the validator, pick the strategy, calculate fee and total            | Save anything                    |
 | TransferService       | Validate, price with the strategy, route via strategy → adapter, save the snapshot, log | Know DFSP JSON formats |
 | DfspStrategy          | DFSP-specific behaviour: pricing policy and which client to use            | Build raw HTTP/JSON              |
@@ -225,27 +224,39 @@ classDiagram
   which the transfer service handles. Timeouts are configurable:
   `dfsp.client.connect-timeout=3s`, `dfsp.client.read-timeout=5s`.
 
-### 5.3 Factory — used, because lookup-by-code is genuinely needed
+### 5.3 No Factory — a direct lookup is simpler for two DFSPs
 
-`DfspStrategyFactory` answers one question: *"Which strategy handles destination `DFSP_B`?"*
+An earlier version of this project had a `DfspStrategyFactory` that indexed the
+strategies into a `Map<String, DfspStrategy>` at startup and exposed `getStrategy(code)`.
+It was removed: with exactly **two** DFSPs, a dedicated class for this lookup was more
+machinery than the problem needed.
 
-> **Decision:** implemented as a *selection* factory. Spring DI already creates
-> the strategy objects, so the factory does not call `new`. It indexes the injected
-> strategies by provider code, fails at startup on duplicate codes, and throws when a
-> provider has no strategy. `QuoteService` and `TransferService` both use it,
-> so this selection logic is written once.
+**How selection works now:** Spring injects every `DfspStrategy` bean into `QuoteService`
+and `TransferService` as a plain `List<DfspStrategy>`. Each service has one small private
+method that searches that list for the strategy whose `getProviderCode()` matches the
+destination provider:
 
-- Spring injects **all** `DfspStrategy` beans as a `List`.
-- The factory builds a `Map<String, DfspStrategy>` keyed by `getProviderCode()`.
-- `getStrategy(code)` returns the match, or throws an error if no strategy exists for that code.
+```java
+private DfspStrategy strategyFor(String providerCode) {
+    return dfspStrategies.stream()
+            .filter(strategy -> strategy.getProviderCode().equals(providerCode))
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("No DFSP strategy registered for provider " + providerCode));
+}
+```
 
-**Why it is worth having:** without it, `QuoteService` and `TransferService`
-would each need a `switch` over provider codes. That is the exact `if/else` the
-Strategy Pattern is meant to remove.
+- No separate class, no `Map` built at startup — just a list with two elements.
+- `TransferService` and `QuoteService` still never write `if (code.equals("DFSP_A")) ...`.
+  They still ask "give me the strategy for this code" and call it; only *how* that
+  question is answered changed, from a factory's map lookup to a stream search.
+- Adding a DFSP-C strategy bean is still enough on its own — the method above needs no change,
+  it will find the new bean in the injected list automatically.
+- The same small method is duplicated once in `QuoteService` and once in `TransferService`
+  (about five lines each) instead of living in a shared class. At this size, two short
+  copies are easier to read than one extra indirection layer.
 
-**Where we do NOT use a factory:** adapters. Each strategy always uses the same
-adapter, so Spring injects the adapter directly into the strategy constructor.
-A factory there would add a class with no benefit.
+**Where we do NOT use a factory:** adapters, same as before. Each strategy always uses the
+same adapter, so Spring injects the adapter directly into the strategy constructor.
 
 ---
 
@@ -300,14 +311,14 @@ A factory there would add a class with no benefit.
   "timestamp": "2026-09-14T10:01:12Z",
   "status": 400,
   "error": "Bad Request",
-  "message": "Source and destination provider cannot be the same",
+  "message": "Provider not found: DFSP_X",
   "fieldErrors": {}
 }
 ```
 
 | HTTP | When                                                                    |
 |------|-------------------------------------------------------------------------|
-| 400  | Field validation failed, malformed JSON, same provider, provider not found or inactive |
+| 400  | Field validation failed, malformed JSON, provider not found or inactive |
 | 404  | No endpoint for the URL                                                 |
 | 405  | HTTP method not supported by the endpoint                               |
 | 415  | Body not sent as `application/json`                                     |
@@ -329,8 +340,11 @@ It is saved and returned as a `FAILED` transaction.
 | At most 9 integer digits, 2 decimal places  | Request DTO                               | `@Digits(integer = 9, fraction = 2)` |
 | Source provider is required                 | Request DTO                               | `@NotBlank`                        |
 | Destination provider is required            | Request DTO                               | `@NotBlank`                        |
-| Source and destination are not the same     | `PaymentRequestValidator`                 | Business check → 400               |
 | Provider exists and is ACTIVE               | `PaymentRequestValidator`                 | DB lookup → 400                    |
+
+Source and destination are **allowed to be the same provider**. A DFSP sending a payment to
+itself (e.g. `DFSP_A` → `DFSP_A`) is validated, priced and routed exactly like any other
+transfer, using that provider's own strategy and adapter.
 
 Request validation runs first (`@Valid`), so an invalid request never reaches a service.
 `GlobalExceptionHandler` (`@RestControllerAdvice`) converts `MethodArgumentNotValidException`
@@ -353,7 +367,6 @@ sequenceDiagram
     participant QS as QuoteService
     participant PV as PaymentRequestValidator
     participant DB as PostgreSQL
-    participant SF as DfspStrategyFactory
     participant ST as DfspStrategy (destination)
 
     U->>FE: choose A → B, amount 1000, click "Get Quote"
@@ -361,12 +374,10 @@ sequenceDiagram
     QC->>QC: @Valid (400 if amount ≤ 0 / codes missing)
     QC->>QS: calculateQuote(request)
     QS->>PV: validate(DFSP_A, DFSP_B)
-    PV->>PV: source ≠ destination? (400)
     PV->>DB: SELECT * FROM providers WHERE code = ?
     DB-->>PV: provider rows (400 if missing or inactive)
     PV-->>QS: PaymentProviders(source, destination)
-    QS->>SF: getStrategy("DFSP_B")
-    SF-->>QS: DfspBStrategy
+    QS->>QS: find strategy where getProviderCode() == "DFSP_B" (DfspBStrategy)
     QS->>ST: calculateQuote(1000, DFSP-B provider)
     ST-->>QS: feePct 1.5, fee 15.00, total 1015.00
     QS-->>QC: QuoteResponse
@@ -386,7 +397,6 @@ sequenceDiagram
     participant TC as TransferController
     participant TS as TransferService
     participant PV as PaymentRequestValidator
-    participant SF as DfspStrategyFactory
     participant ST as DfspBStrategy
     participant AD as DfspBAdapter
     participant D as dfsp-b
@@ -398,8 +408,7 @@ sequenceDiagram
     TC->>TS: executeTransfer(request)
     TS->>PV: validate(DFSP_A, DFSP_B)
     PV-->>TS: PaymentProviders(source, destination)
-    TS->>SF: getStrategy("DFSP_B")
-    SF-->>TS: DfspBStrategy
+    TS->>TS: find strategy where getProviderCode() == "DFSP_B" (DfspBStrategy)
     TS->>ST: calculateQuote(1000, DFSP-B provider)
     ST-->>TS: QuoteCalculation (1.5%, 15, 1015)
     TS->>TS: generate transactionId (UUID)
@@ -417,10 +426,10 @@ sequenceDiagram
 ```
 
 Step by step:
-1. **Validate**: DTO rules, source ≠ destination, both providers exist and are ACTIVE.
+1. **Validate**: DTO rules, both providers exist and are ACTIVE (source and destination may be the same provider).
 2. **Determine the destination provider** and **calculate** fee % / fee / total with the *current* configuration. Pricing uses the destination strategy's `calculateQuote`, the same method quotes use, so the quote and transfer rules are the same code.
 3. **Generate** a unique `transactionId` before calling the DFSP, so the DFSP receives it as a reference.
-4. **Route**: `DfspStrategyFactory` → destination strategy → its adapter → HTTP call to the DFSP's `base_url`.
+4. **Route**: find the strategy whose provider code matches the destination → its adapter → HTTP call to the DFSP's `base_url`.
 5. **Receive the response**: the adapter maps it to `SUCCESS` or `FAILED`. If the DFSP is unreachable or times out, the service catches `DfspCommunicationException` and the status is `FAILED`.
 6. **Save** one `transactions` row with the pricing snapshot and status.
 7. **Log** the result: INFO for SUCCESS, WARN for FAILED, ERROR for exceptions.
@@ -566,12 +575,12 @@ Mini Payment Router Simulator/
 
 | Level | Where | What it proves | Needs |
 |-------|-------|----------------|-------|
-| Unit | `PaymentRequestValidatorTest`, `QuoteServiceTest`, `TransferServiceTest`, `DfspStrategyFactoryTest` | Validation rules, destination-fee pricing and rounding, routing to the right strategy, SUCCESS/FAILED/timeout handling | nothing |
+| Unit | `PaymentRequestValidatorTest`, `QuoteServiceTest`, `TransferServiceTest` | Validation rules, destination-fee pricing and rounding, routing to the right strategy, SUCCESS/FAILED/timeout handling | nothing |
 | Adapter contract | `DfspAAdapterTest`, `DfspBAdapterTest` (`MockRestServiceServer`) | Each DFSP's URL, field names, units (taka vs paisa) and result mapping | nothing |
 | Web layer | `GlobalExceptionHandlerTest`, `ProviderControllerTest`, `CorsConfigTest`, `DtoJsonMappingTest` | HTTP status codes, consistent error JSON, CORS allow-list, JSON shape | nothing |
 | Repository | `ProviderRepositoryTest`, `TransactionRepositoryTest` | Constraints and queries against the real schema | PostgreSQL |
 | Integration | `TransferPersistenceIntegrationTest` | Transaction rows, foreign keys and pricing snapshot in PostgreSQL | PostgreSQL |
-| API end-to-end | `PaymentApiIntegrationTest` | Real HTTP API → real `RestClient` → fake DFSP HTTP servers → PostgreSQL → log file: valid quote, invalid amount, same provider, unknown provider, A→B, B→A, fee snapshot, DFSP rejection, DFSP unreachable, file logging | PostgreSQL |
+| API end-to-end | `PaymentApiIntegrationTest` | Real HTTP API → real `RestClient` → fake DFSP HTTP servers → PostgreSQL → log file: valid quote, invalid amount, unknown provider, A→B, B→A, A→A, B→B, fee snapshot, DFSP rejection, DFSP unreachable, file logging | PostgreSQL |
 | DFSP services | `dfsp-a`, `dfsp-b` controller and service tests | Each dummy DFSP's accept/reject rule and API | nothing |
 | Frontend | `frontend/src/api/paymentRouterApi.test.js` (Vitest) | Relative `/api` URLs, JSON request body, error JSON → `ApiError`, unreachable router | nothing |
 | Docker smoke | `scripts/smoke-test.sh` | Compose services running; browser path through Nginx (with `Origin` header) to router, DFSPs, PostgreSQL rows and the `./logs` file | running Compose stack |
@@ -591,7 +600,7 @@ Mini Payment Router Simulator/
 | Logging to file                     | Logback file appender → `logs/payment-router.log`                   |
 | Docker multi-service setup          | 5 Compose services on one network, communicating by service name    |
 | Frontend + backend                  | React (Nginx) + Spring Boot                                         |
-| Explainable design                  | Layered structure + Strategy, Adapter, and one justified Factory    |
+| Explainable design                  | Layered structure + Strategy and Adapter patterns, kept deliberately minimal (no Factory) for two DFSPs |
 
 ## 14. Intentionally Not Included
 

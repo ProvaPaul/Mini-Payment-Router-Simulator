@@ -82,16 +82,16 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
-    void sameSourceAndDestinationReturns400() throws Exception {
+    void inactiveProviderReturns400() throws Exception {
         when(transferService.executeTransfer(any()))
-                .thenThrow(new InvalidPaymentRequestException("Source and destination provider cannot be the same"));
+                .thenThrow(new InvalidPaymentRequestException("Provider is not active: DFSP_A"));
 
         postJson("/api/transfers", """
-                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_A","amount":1000}
+                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_B","amount":1000}
                 """)
                 .andExpect(status().isBadRequest())
                 .andExpect(consistentShape(400, "Bad Request"))
-                .andExpect(jsonPath("$.message").value("Source and destination provider cannot be the same"))
+                .andExpect(jsonPath("$.message").value("Provider is not active: DFSP_A"))
                 .andExpect(jsonPath("$.fieldErrors").isEmpty());
     }
 

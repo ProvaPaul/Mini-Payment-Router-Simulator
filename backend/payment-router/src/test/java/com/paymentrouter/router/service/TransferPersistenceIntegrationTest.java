@@ -116,10 +116,28 @@ class TransferPersistenceIntegrationTest {
         long rowsBefore = transactionRepository.count();
 
         assertThatThrownBy(() -> transferService.executeTransfer(
-                new TransferRequest("DFSP_A", "DFSP_A", new BigDecimal("1000"))))
+                new TransferRequest("DFSP_A", "DFSP_X", new BigDecimal("1000"))))
                 .isInstanceOf(InvalidPaymentRequestException.class);
 
         assertThat(transactionRepository.count()).isEqualTo(rowsBefore);
+    }
+
+    @Test
+    void persistsTransferWhenSourceAndDestinationAreTheSameProvider() {
+        when(dfspAAdapter.transfer(any(), any()))
+                .thenReturn(new DfspTransferResult(true, "A-TXN-TEST0003", "Transfer completed"));
+
+        TransferResponse response = transferService.executeTransfer(
+                new TransferRequest("DFSP_A", "DFSP_A", new BigDecimal("1000")));
+
+        Transaction saved = reloadFromDatabase(response.transactionId());
+
+        // Both foreign keys point at the same providers row; the schema already allows this
+        // since source_provider_id and destination_provider_id are independent columns.
+        assertThat(saved.getSourceProvider().getCode()).isEqualTo("DFSP_A");
+        assertThat(saved.getDestinationProvider().getCode()).isEqualTo("DFSP_A");
+        assertThat(saved.getSourceProvider().getId()).isEqualTo(saved.getDestinationProvider().getId());
+        assertThat(saved.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
     }
 
     /**

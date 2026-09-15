@@ -115,7 +115,7 @@ class PaymentApiIntegrationTest {
         assertThat(transactionRepository.count()).isEqualTo(rowsBefore);
     }
 
-    // ---- 2–4. Rejected requests ----
+    // ---- 2 and 4. Rejected requests ----
 
     @Test
     void invalidAmountIsRejectedBeforeAnyDfspCallOrSave() throws Exception {
@@ -126,18 +126,6 @@ class PaymentApiIntegrationTest {
                 .andExpect(jsonPath("$.fieldErrors.amount").value("amount must be greater than zero"));
 
         assertThat(dfspB.requestCount()).isZero();
-        assertThat(transactionRepository.count()).isEqualTo(rowsBefore);
-    }
-
-    @Test
-    void sameSourceAndDestinationIsRejected() throws Exception {
-        long rowsBefore = transactionRepository.count();
-
-        postJson("/api/transfers", payment("DFSP_A", "DFSP_A", "1000"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("Source and destination provider cannot be the same"));
-
-        assertThat(dfspA.requestCount()).isZero();
         assertThat(transactionRepository.count()).isEqualTo(rowsBefore);
     }
 
@@ -202,6 +190,62 @@ class PaymentApiIntegrationTest {
 
         Transaction saved = reload(transactionId);
         assertThat(saved.getDestinationProvider().getCode()).isEqualTo("DFSP_A");
+        assertThat(saved.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+    }
+
+    // ---- Same-provider transfers: source and destination are allowed to be equal ----
+
+    @Test
+    void transferAToAUsesDfspAsOwnStrategyAndIsPersisted() throws Exception {
+        MvcResult result = postJson("/api/transfers", payment("DFSP_A", "DFSP_A", "1000"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.feePercentage").value(1.00))
+                .andExpect(jsonPath("$.feeAmount").value(10.00))
+                .andExpect(jsonPath("$.totalAmount").value(1010.00))
+                .andReturn();
+        UUID transactionId = transactionIdOf(result);
+
+        // Destination is DFSP_A, so DFSP-A's own adapter and fee are used normally,
+        // even though the source is also DFSP_A. DFSP-B is never called.
+        assertThat(dfspA.requestCount()).isEqualTo(1);
+        assertThat(dfspA.lastRequestBody())
+                .contains("\"transactionId\":\"" + transactionId + "\"")
+                .contains("\"sourceProvider\":\"DFSP_A\"")
+                .contains("\"amount\":1000.00")
+                .contains("\"fee\":10.00");
+        assertThat(dfspB.requestCount()).isZero();
+
+        Transaction saved = reload(transactionId);
+        assertThat(saved.getSourceProvider().getCode()).isEqualTo("DFSP_A");
+        assertThat(saved.getDestinationProvider().getCode()).isEqualTo("DFSP_A");
+        assertThat(saved.getSourceProvider().getId()).isEqualTo(saved.getDestinationProvider().getId());
+        assertThat(saved.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
+    }
+
+    @Test
+    void transferBToBUsesDfspBsOwnStrategyAndIsPersisted() throws Exception {
+        MvcResult result = postJson("/api/transfers", payment("DFSP_B", "DFSP_B", "1000"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.feePercentage").value(1.50))
+                .andExpect(jsonPath("$.feeAmount").value(15.00))
+                .andExpect(jsonPath("$.totalAmount").value(1015.00))
+                .andReturn();
+        UUID transactionId = transactionIdOf(result);
+
+        assertThat(dfspB.requestCount()).isEqualTo(1);
+        assertThat(dfspB.lastRequestBody())
+                .contains("\"clientRef\":\"" + transactionId + "\"")
+                .contains("\"senderDfsp\":\"DFSP_B\"")
+                .contains("\"amountInPaisa\":100000")
+                .contains("\"feeInPaisa\":1500");
+        assertThat(dfspA.requestCount()).isZero();
+
+        Transaction saved = reload(transactionId);
+        assertThat(saved.getSourceProvider().getCode()).isEqualTo("DFSP_B");
+        assertThat(saved.getDestinationProvider().getCode()).isEqualTo("DFSP_B");
+        assertThat(saved.getSourceProvider().getId()).isEqualTo(saved.getDestinationProvider().getId());
         assertThat(saved.getStatus()).isEqualTo(TransactionStatus.SUCCESS);
     }
 

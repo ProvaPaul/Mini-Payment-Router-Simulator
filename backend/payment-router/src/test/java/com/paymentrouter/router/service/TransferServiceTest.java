@@ -35,10 +35,10 @@ import com.paymentrouter.router.exception.InvalidPaymentRequestException;
 import com.paymentrouter.router.repository.TransactionRepository;
 import com.paymentrouter.router.strategy.DfspAStrategy;
 import com.paymentrouter.router.strategy.DfspBStrategy;
-import com.paymentrouter.router.strategy.DfspStrategyFactory;
+import com.paymentrouter.router.strategy.DfspStrategy;
 
 /**
- * Unit test for the transfer flow with the real strategies and factory.
+ * Unit test for the transfer flow with the real strategies.
  * Validation, adapters (HTTP) and the repository (database) are mocked.
  */
 @ExtendWith(MockitoExtension.class)
@@ -63,9 +63,8 @@ class TransferServiceTest {
 
     @BeforeEach
     void setUp() {
-        DfspStrategyFactory factory = new DfspStrategyFactory(
-                List.of(new DfspAStrategy(dfspAAdapter), new DfspBStrategy(dfspBAdapter)));
-        transferService = new TransferService(paymentRequestValidator, factory, transactionRepository);
+        List<DfspStrategy> strategies = List.of(new DfspAStrategy(dfspAAdapter), new DfspBStrategy(dfspBAdapter));
+        transferService = new TransferService(paymentRequestValidator, strategies, transactionRepository);
     }
 
     @Test
@@ -156,14 +155,39 @@ class TransferServiceTest {
 
     @Test
     void doesNotCallDfspOrSaveWhenValidationFails() {
-        when(paymentRequestValidator.validate("DFSP_A", "DFSP_A"))
-                .thenThrow(new InvalidPaymentRequestException("Source and destination provider cannot be the same"));
+        when(paymentRequestValidator.validate("DFSP_A", "DFSP_X"))
+                .thenThrow(new InvalidPaymentRequestException("Provider not found: DFSP_X"));
 
         assertThatThrownBy(() -> transferService.executeTransfer(
-                new TransferRequest("DFSP_A", "DFSP_A", new BigDecimal("1000"))))
+                new TransferRequest("DFSP_A", "DFSP_X", new BigDecimal("1000"))))
                 .isInstanceOf(InvalidPaymentRequestException.class);
 
         verifyNoInteractions(dfspAAdapter, dfspBAdapter, transactionRepository);
+    }
+
+    @Test
+    void routesToOwnDfspAndSavesTransactionWhenSourceAndDestinationAreTheSameProvider() {
+        when(paymentRequestValidator.validate("DFSP_A", "DFSP_A")).thenReturn(new PaymentProviders(dfspA, dfspA));
+        when(dfspAAdapter.transfer(eq("http://dfsp-a.test"), any()))
+                .thenReturn(new DfspTransferResult(true, "A-TXN-000456", "Transfer completed"));
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransferResponse response = transferService.executeTransfer(
+                new TransferRequest("DFSP_A", "DFSP_A", new BigDecimal("1000")));
+
+        // DFSP_A is used normally as the destination's strategy/adapter; DFSP-B is never involved.
+        verify(dfspAAdapter).transfer(eq("http://dfsp-a.test"), any());
+        verifyNoInteractions(dfspBAdapter);
+
+        ArgumentCaptor<Transaction> saved = ArgumentCaptor.forClass(Transaction.class);
+        verify(transactionRepository).save(saved.capture());
+        assertThat(saved.getValue().getSourceProvider()).isSameAs(dfspA);
+        assertThat(saved.getValue().getDestinationProvider()).isSameAs(dfspA);
+        assertThat(saved.getValue().getFeePercentage()).isEqualTo(new BigDecimal("1.00"));
+
+        assertThat(response.status()).isEqualTo(TransactionStatus.SUCCESS);
+        assertThat(response.sourceProviderCode()).isEqualTo("DFSP_A");
+        assertThat(response.destinationProviderCode()).isEqualTo("DFSP_A");
     }
 
     private static Provider provider(String code, String feePercentage, String baseUrl) {
