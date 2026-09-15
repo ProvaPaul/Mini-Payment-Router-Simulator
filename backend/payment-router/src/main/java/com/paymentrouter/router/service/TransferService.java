@@ -1,5 +1,6 @@
 package com.paymentrouter.router.service;
 
+import java.net.SocketTimeoutException;
 import java.util.UUID;
 
 import org.slf4j.Logger;
@@ -24,7 +25,7 @@ import com.paymentrouter.router.strategy.QuoteCalculation;
  * validate → destination strategy → price → call destination DFSP → save transaction → respond.
  * <p>
  * Every attempt that passes validation is saved, whether the DFSP accepts it, rejects it,
- * or cannot be reached.
+ * times out, or cannot be reached.
  * <p>
  * The database write happens after the DFSP call and is not wrapped around it, so no
  * database transaction is held open while waiting for a remote service.
@@ -35,6 +36,7 @@ public class TransferService {
     private static final Logger log = LoggerFactory.getLogger(TransferService.class);
 
     static final String DFSP_UNAVAILABLE_MESSAGE = "Destination DFSP is unavailable";
+    static final String DFSP_TIMEOUT_MESSAGE = "Destination DFSP did not respond in time";
 
     private final PaymentRequestValidator paymentRequestValidator;
     private final DfspStrategyFactory dfspStrategyFactory;
@@ -82,7 +84,7 @@ public class TransferService {
                     result.providerReference(), result.message());
         } catch (DfspCommunicationException exception) {
             status = TransactionStatus.FAILED;
-            message = DFSP_UNAVAILABLE_MESSAGE;
+            message = isTimeout(exception) ? DFSP_TIMEOUT_MESSAGE : DFSP_UNAVAILABLE_MESSAGE;
             log.error("Could not complete transfer {} with {}: {}",
                     transactionId, destination.getCode(), exception.getMessage(), exception);
         }
@@ -124,5 +126,15 @@ public class TransferService {
             return result.message();
         }
         return result.message() + " (ref " + result.providerReference() + ")";
+    }
+
+    /** True when the DFSP call failed because the connect or read timeout expired. */
+    private static boolean isTimeout(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SocketTimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 }

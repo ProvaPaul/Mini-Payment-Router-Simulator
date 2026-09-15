@@ -10,6 +10,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -109,6 +110,16 @@ class DfspBAdapterTest {
         assertThatThrownBy(() -> adapter.transfer(BASE_URL, aToB("1000.00", "15.00")))
                 .isInstanceOf(DfspCommunicationException.class)
                 .hasMessageContaining("Connection refused");
+    }
+
+    @Test
+    void keepsTimeoutAsRootCauseOfCommunicationException() {
+        server.expect(requestTo(BASE_URL + "/v1/payments/receive"))
+                .andRespond(withException(new SocketTimeoutException("Read timed out")));
+
+        assertThatThrownBy(() -> adapter.transfer(BASE_URL, aToB("1000.00", "15.00")))
+                .isInstanceOf(DfspCommunicationException.class)
+                .hasRootCauseInstanceOf(SocketTimeoutException.class);
     }
 
     private static DfspTransferRequest aToB(String amount, String fee) {

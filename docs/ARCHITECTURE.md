@@ -303,8 +303,14 @@ A factory there would add a class with no benefit.
 
 | HTTP | When                                                                    |
 |------|-------------------------------------------------------------------------|
-| 400  | Field validation failed, same provider, provider not found or inactive  |
-| 500  | Unexpected server error                                                 |
+| 400  | Field validation failed, malformed JSON, same provider, provider not found or inactive |
+| 404  | No endpoint for the URL                                                 |
+| 405  | HTTP method not supported by the endpoint                               |
+| 415  | Body not sent as `application/json`                                     |
+| 500  | Unexpected server error (details only in the log)                       |
+
+All of these are produced by `GlobalExceptionHandler` with the same JSON shape.
+A DFSP timeout gets its own FAILED message: "Destination DFSP did not respond in time".
 
 DFSP rejection or DFSP unavailability is **not** an HTTP error for the client.
 It is saved and returned as a `FAILED` transaction.

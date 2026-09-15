@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
+import java.net.SocketTimeoutException;
 import java.util.List;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.web.client.ResourceAccessException;
 
 import com.paymentrouter.router.client.DfspAAdapter;
 import com.paymentrouter.router.client.DfspBAdapter;
@@ -133,6 +135,23 @@ class TransferServiceTest {
         assertThat(saved.getValue().getStatus()).isEqualTo(TransactionStatus.FAILED);
         assertThat(response.status()).isEqualTo(TransactionStatus.FAILED);
         assertThat(response.message()).isEqualTo(TransferService.DFSP_UNAVAILABLE_MESSAGE);
+    }
+
+    @Test
+    void savesFailedTransactionWithTimeoutMessageWhenDfspTimesOut() {
+        when(paymentRequestValidator.validate("DFSP_A", "DFSP_B")).thenReturn(new PaymentProviders(dfspA, dfspB));
+        // Same exception chain the adapter produces when RestClient's read timeout expires.
+        DfspCommunicationException timeout = new DfspCommunicationException(
+                "DFSP-B request failed: Read timed out",
+                new ResourceAccessException("I/O error", new SocketTimeoutException("Read timed out")));
+        when(dfspBAdapter.transfer(eq("http://dfsp-b.test"), any())).thenThrow(timeout);
+        when(transactionRepository.save(any(Transaction.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        TransferResponse response = transferService.executeTransfer(
+                new TransferRequest("DFSP_A", "DFSP_B", new BigDecimal("1000")));
+
+        assertThat(response.status()).isEqualTo(TransactionStatus.FAILED);
+        assertThat(response.message()).isEqualTo(TransferService.DFSP_TIMEOUT_MESSAGE);
     }
 
     @Test
