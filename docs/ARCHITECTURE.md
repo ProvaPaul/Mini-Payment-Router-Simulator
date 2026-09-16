@@ -226,15 +226,11 @@ classDiagram
 
 ### 5.3 No Factory — a direct lookup is simpler for two DFSPs
 
-An earlier version of this project had a `DfspStrategyFactory` that indexed the
-strategies into a `Map<String, DfspStrategy>` at startup and exposed `getStrategy(code)`.
-It was removed: with exactly **two** DFSPs, a dedicated class for this lookup was more
-machinery than the problem needed.
-
-**How selection works now:** Spring injects every `DfspStrategy` bean into `QuoteService`
-and `TransferService` as a plain `List<DfspStrategy>`. Each service has one small private
-method that searches that list for the strategy whose `getProviderCode()` matches the
-destination provider:
+With exactly **two** DFSPs, a dedicated factory class to select between them would be
+more machinery than the problem needs. Spring injects every `DfspStrategy` bean into
+`QuoteService` and `TransferService` as a plain `List<DfspStrategy>`. Each service has
+one small private method that searches that list for the strategy whose
+`getProviderCode()` matches the destination provider:
 
 ```java
 private DfspStrategy strategyFor(String providerCode) {
@@ -246,9 +242,8 @@ private DfspStrategy strategyFor(String providerCode) {
 ```
 
 - No separate class, no `Map` built at startup — just a list with two elements.
-- `TransferService` and `QuoteService` still never write `if (code.equals("DFSP_A")) ...`.
-  They still ask "give me the strategy for this code" and call it; only *how* that
-  question is answered changed, from a factory's map lookup to a stream search.
+- `TransferService` and `QuoteService` never write `if (code.equals("DFSP_A")) ...`.
+  They ask "give me the strategy for this code" and call it.
 - Adding a DFSP-C strategy bean is still enough on its own — the method above needs no change,
   it will find the new bean in the injected list automatically.
 - The same small method is duplicated once in `QuoteService` and once in `TransferService`

@@ -34,31 +34,11 @@ worth keeping, not an error that vanishes.
 
 ## Tech stack
 
-**Backend**
-
-- Spring Boot 4.1 (Java 21), Spring MVC, Bean Validation
-- Spring Data JPA / Hibernate
-- Spring `RestClient` (with connect and read timeouts) for calling the DFSPs
-- Maven Wrapper — no local Maven install needed
-
-**Frontend**
-
-- React 19, Vite 8
-- Served in production by Nginx (static files + `/api` reverse proxy)
-
-**Database**
-
-- PostgreSQL 16
-
-**Testing**
-
-- JUnit 5, Mockito (backend)
-- A bash + curl smoke test against the running Docker Compose stack
-
-**Infrastructure**
-
-- Docker, multi-stage Dockerfiles
-- Docker Compose (5 services, healthchecks, a named volume)
+- **Backend** — Spring Boot 4.1 (Java 21), Spring Data JPA / Hibernate
+- **Database** — PostgreSQL 16
+- **Frontend** — React 19, Vite 8, served in production by Nginx
+- **Testing** — JUnit 5, Mockito, bash + curl smoke test
+- **Containerization** — Docker, Docker Compose
 
 ---
 
