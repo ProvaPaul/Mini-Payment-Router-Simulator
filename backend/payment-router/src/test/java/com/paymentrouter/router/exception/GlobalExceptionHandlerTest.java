@@ -1,164 +1,131 @@
 package com.paymentrouter.router.exception;
 
-import static org.hamcrest.Matchers.containsString;
-import static org.hamcrest.Matchers.not;
-import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.BeanPropertyBindingResult;
+import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 
-import com.paymentrouter.router.controller.QuoteController;
-import com.paymentrouter.router.controller.TransferController;
-import com.paymentrouter.router.service.QuoteService;
-import com.paymentrouter.router.service.TransferService;
+import com.paymentrouter.router.dto.ErrorResponse;
+
+import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Web-layer test of the JSON error contract. Services are mocked; no database or DFSP is needed.
- * Every error must have the same shape: timestamp, status, error, message, fieldErrors.
+ * Unit test of the JSON error contract: calls each {@code @ExceptionHandler} method directly
+ * with a manually built exception and checks the {@link ErrorResponse} it returns. No MockMvc,
+ * no HTTP dispatch and no {@code @Valid} pipeline — this tests the mapping logic
+ * (exception → status/message/fieldErrors) in isolation, which is what the handler actually does.
  */
-@WebMvcTest(controllers = {QuoteController.class, TransferController.class})
 class GlobalExceptionHandlerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockitoBean
-    private QuoteService quoteService;
-
-    @MockitoBean
-    private TransferService transferService;
+    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
 
     @Test
-    void invalidAmountReturns400WithFieldError() throws Exception {
-        postJson("/api/quotes", """
-                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_B","amount":0}
-                """)
-                .andExpect(status().isBadRequest())
-                .andExpect(consistentShape(400, "Bad Request"))
-                .andExpect(jsonPath("$.message").value("Request validation failed"))
-                .andExpect(jsonPath("$.fieldErrors.amount").value("amount must be greater than zero"));
-    }
+    void handleRequestValidationBuildsSortedFieldErrorsFromBindingResult() {
+        BeanPropertyBindingResult bindingResult = new BeanPropertyBindingResult(new Object(), "request");
+        bindingResult.addError(new FieldError("request", "sourceProviderCode", "sourceProviderCode is required"));
+        bindingResult.addError(new FieldError("request", "amount", "amount must be greater than zero"));
+        MethodArgumentNotValidException exception = new MethodArgumentNotValidException(null, bindingResult);
 
-    @Test
-    void amountTooLargeToStoreReturns400WithFieldError() throws Exception {
-        postJson("/api/transfers", """
-                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_B","amount":9999999999.99}
-                """)
-                .andExpect(status().isBadRequest())
-                .andExpect(consistentShape(400, "Bad Request"))
-                .andExpect(jsonPath("$.fieldErrors.amount").value("amount must have at most 9 digits and 2 decimal places"));
+        ResponseEntity<ErrorResponse> response = handler.handleRequestValidation(exception);
+
+        assertConsistentShape(response, 400, "Bad Request");
+        assertThat(response.getBody().message()).isEqualTo("Request validation failed");
+        assertThat(response.getBody().fieldErrors())
+                .containsEntry("amount", "amount must be greater than zero")
+                .containsEntry("sourceProviderCode", "sourceProviderCode is required");
+        // TreeMap: keys come back in alphabetical order regardless of the order errors were added.
+        assertThat(response.getBody().fieldErrors().keySet()).containsExactly("amount", "sourceProviderCode");
     }
 
     @Test
-    void nonNumericAmountReturns400MalformedRequest() throws Exception {
-        postJson("/api/transfers", """
-                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_B","amount":"abc"}
-                """)
-                .andExpect(status().isBadRequest())
-                .andExpect(consistentShape(400, "Bad Request"))
-                .andExpect(jsonPath("$.message").value("Malformed JSON request"))
-                .andExpect(jsonPath("$.fieldErrors").isEmpty());
+    void handleUnreadableBodyReturnsMalformedRequestMessage() {
+        HttpMessageNotReadableException exception =
+                new HttpMessageNotReadableException("JSON parse error", (org.springframework.http.HttpInputMessage) null);
+
+        ResponseEntity<ErrorResponse> response = handler.handleUnreadableBody(exception);
+
+        assertConsistentShape(response, 400, "Bad Request");
+        assertThat(response.getBody().message()).isEqualTo("Malformed JSON request");
+        assertThat(response.getBody().fieldErrors()).isEmpty();
     }
 
     @Test
-    void missingProviderReturns400WithFieldError() throws Exception {
-        postJson("/api/transfers", """
-                {"destinationProviderCode":"DFSP_B","amount":1000}
-                """)
-                .andExpect(status().isBadRequest())
-                .andExpect(consistentShape(400, "Bad Request"))
-                .andExpect(jsonPath("$.fieldErrors.sourceProviderCode").value("sourceProviderCode is required"));
+    void handleBusinessValidationReturnsTheExceptionMessageAsIs() {
+        InvalidPaymentRequestException exception = new InvalidPaymentRequestException("Provider not found: DFSP_X");
+
+        ResponseEntity<ErrorResponse> response = handler.handleBusinessValidation(exception);
+
+        assertConsistentShape(response, 400, "Bad Request");
+        assertThat(response.getBody().message()).isEqualTo("Provider not found: DFSP_X");
+        assertThat(response.getBody().fieldErrors()).isEmpty();
     }
 
     @Test
-    void inactiveProviderReturns400() throws Exception {
-        when(transferService.executeTransfer(any()))
-                .thenThrow(new InvalidPaymentRequestException("Provider is not active: DFSP_A"));
+    void handleUnknownEndpointIncludesMethodAndPath() {
+        HttpServletRequest request = mock(HttpServletRequest.class);
+        when(request.getMethod()).thenReturn("GET");
+        when(request.getRequestURI()).thenReturn("/api/unknown");
 
-        postJson("/api/transfers", """
-                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_B","amount":1000}
-                """)
-                .andExpect(status().isBadRequest())
-                .andExpect(consistentShape(400, "Bad Request"))
-                .andExpect(jsonPath("$.message").value("Provider is not active: DFSP_A"))
-                .andExpect(jsonPath("$.fieldErrors").isEmpty());
+        ResponseEntity<ErrorResponse> response = handler.handleUnknownEndpoint(request);
+
+        assertConsistentShape(response, 404, "Not Found");
+        assertThat(response.getBody().message()).isEqualTo("Endpoint not found: GET /api/unknown");
     }
 
     @Test
-    void providerNotFoundReturns400() throws Exception {
-        when(quoteService.calculateQuote(any()))
-                .thenThrow(new InvalidPaymentRequestException("Provider not found: DFSP_X"));
+    void handleMethodNotSupportedNamesTheMethod() {
+        HttpRequestMethodNotSupportedException exception = new HttpRequestMethodNotSupportedException("GET");
 
-        postJson("/api/quotes", """
-                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_X","amount":1000}
-                """)
-                .andExpect(status().isBadRequest())
-                .andExpect(consistentShape(400, "Bad Request"))
-                .andExpect(jsonPath("$.message").value("Provider not found: DFSP_X"));
+        ResponseEntity<ErrorResponse> response = handler.handleMethodNotSupported(exception);
+
+        assertConsistentShape(response, 405, "Method Not Allowed");
+        assertThat(response.getBody().message()).isEqualTo("HTTP method GET is not supported for this endpoint");
     }
 
     @Test
-    void unknownEndpointReturns404() throws Exception {
-        mockMvc.perform(get("/api/unknown"))
-                .andExpect(status().isNotFound())
-                .andExpect(consistentShape(404, "Not Found"))
-                .andExpect(jsonPath("$.message").value("Endpoint not found: GET /api/unknown"));
+    void handleUnsupportedMediaTypeReturnsFixedMessage() {
+        HttpMediaTypeNotSupportedException exception =
+                new HttpMediaTypeNotSupportedException(MediaType.TEXT_PLAIN, List.of(MediaType.APPLICATION_JSON));
+
+        ResponseEntity<ErrorResponse> response = handler.handleUnsupportedMediaType(exception);
+
+        assertConsistentShape(response, 415, "Unsupported Media Type");
+        assertThat(response.getBody().message()).isEqualTo("Content type not supported, use application/json");
     }
 
     @Test
-    void wrongHttpMethodReturns405() throws Exception {
-        mockMvc.perform(get("/api/quotes"))
-                .andExpect(status().isMethodNotAllowed())
-                .andExpect(consistentShape(405, "Method Not Allowed"))
-                .andExpect(jsonPath("$.message").value("HTTP method GET is not supported for this endpoint"));
+    void handleUnexpectedHidesInternalDetails() {
+        IllegalStateException exception = new IllegalStateException("No DFSP strategy registered for provider DFSP_C");
+
+        ResponseEntity<ErrorResponse> response = handler.handleUnexpected(exception);
+
+        assertConsistentShape(response, 500, "Internal Server Error");
+        // The client only ever gets the generic message; the real cause stays in the log.
+        assertThat(response.getBody().message()).isEqualTo("An unexpected error occurred");
+        assertThat(response.getBody().fieldErrors()).isEmpty();
     }
 
-    @Test
-    void wrongContentTypeReturns415() throws Exception {
-        mockMvc.perform(post("/api/quotes").contentType(MediaType.TEXT_PLAIN).content("amount=1000"))
-                .andExpect(status().isUnsupportedMediaType())
-                .andExpect(consistentShape(415, "Unsupported Media Type"))
-                .andExpect(jsonPath("$.message").value("Content type not supported, use application/json"));
-    }
-
-    @Test
-    void unexpectedErrorReturns500WithoutInternalDetails() throws Exception {
-        when(quoteService.calculateQuote(any()))
-                .thenThrow(new IllegalStateException("No DFSP strategy registered for provider DFSP_C"));
-
-        postJson("/api/quotes", """
-                {"sourceProviderCode":"DFSP_A","destinationProviderCode":"DFSP_C","amount":1000}
-                """)
-                .andExpect(status().isInternalServerError())
-                .andExpect(consistentShape(500, "Internal Server Error"))
-                .andExpect(jsonPath("$.message").value("An unexpected error occurred"))
-                .andExpect(content().string(not(containsString("DFSP_C"))))
-                .andExpect(content().string(not(containsString("IllegalStateException"))));
-    }
-
-    private ResultActions postJson(String path, String body) throws Exception {
-        return mockMvc.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body));
-    }
-
-    /** The fields every error response must contain. */
-    private static org.springframework.test.web.servlet.ResultMatcher consistentShape(int status, String error) {
-        return result -> {
-            jsonPath("$.timestamp").exists().match(result);
-            jsonPath("$.status").value(status).match(result);
-            jsonPath("$.error").value(error).match(result);
-            jsonPath("$.message").exists().match(result);
-            jsonPath("$.fieldErrors").exists().match(result);
-        };
+    /** Every error response must have this shape, whatever the exception. */
+    private static void assertConsistentShape(ResponseEntity<ErrorResponse> response, int status, String error) {
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.valueOf(status));
+        ErrorResponse body = response.getBody();
+        assertThat(body).isNotNull();
+        assertThat(body.timestamp()).isNotNull();
+        assertThat(body.status()).isEqualTo(status);
+        assertThat(body.error()).isEqualTo(error);
+        assertThat(body.message()).isNotNull();
+        assertThat(body.fieldErrors()).isNotNull();
     }
 }

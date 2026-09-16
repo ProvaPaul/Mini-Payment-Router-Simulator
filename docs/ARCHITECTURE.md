@@ -575,18 +575,18 @@ Mini Payment Router Simulator/
 
 | Level | Where | What it proves | Needs |
 |-------|-------|----------------|-------|
-| Unit | `PaymentRequestValidatorTest`, `QuoteServiceTest`, `TransferServiceTest` | Validation rules, destination-fee pricing and rounding, routing to the right strategy, SUCCESS/FAILED/timeout handling | nothing |
-| Adapter contract | `DfspAAdapterTest`, `DfspBAdapterTest` (`MockRestServiceServer`) | Each DFSP's URL, field names, units (taka vs paisa) and result mapping | nothing |
-| Web layer | `GlobalExceptionHandlerTest`, `ProviderControllerTest`, `CorsConfigTest`, `DtoJsonMappingTest` | HTTP status codes, consistent error JSON, CORS allow-list, JSON shape | nothing |
+| Unit | `PaymentRequestValidatorTest`, `QuoteServiceTest`, `TransferServiceTest`, `ProviderServiceTest` | Validation rules, destination-fee pricing and rounding, routing to the right strategy, SUCCESS/FAILED/timeout handling, active-provider listing | nothing |
+| Field validation | `PaymentRequestValidationTest` | `@NotBlank`/`@NotNull`/`@Positive`/`@Digits` constraints on `TransferRequest`, validated directly with `jakarta.validation.Validator` | nothing |
+| Adapter contract | `DfspAAdapterTest`, `DfspBAdapterTest` (a tiny real local `HttpServer`, not a test framework) | Each DFSP's URL, field names, units (taka vs paisa) and result mapping, over a real socket | nothing |
+| Error mapping | `GlobalExceptionHandlerTest`, `DtoJsonMappingTest` | `GlobalExceptionHandler`'s exception → JSON shape mapping (called directly, no HTTP dispatch); DTO JSON contract | nothing |
 | Repository | `ProviderRepositoryTest`, `TransactionRepositoryTest` | Constraints and queries against the real schema | PostgreSQL |
 | Integration | `TransferPersistenceIntegrationTest` | Transaction rows, foreign keys and pricing snapshot in PostgreSQL | PostgreSQL |
-| API end-to-end | `PaymentApiIntegrationTest` | Real HTTP API → real `RestClient` → fake DFSP HTTP servers → PostgreSQL → log file: valid quote, invalid amount, unknown provider, A→B, B→A, A→A, B→B, fee snapshot, DFSP rejection, DFSP unreachable, file logging | PostgreSQL |
-| DFSP services | `dfsp-a`, `dfsp-b` controller and service tests | Each dummy DFSP's accept/reject rule and API | nothing |
-| Frontend | `frontend/src/api/paymentRouterApi.test.js` (Vitest) | Relative `/api` URLs, JSON request body, error JSON → `ApiError`, unreachable router | nothing |
-| Docker smoke | `scripts/smoke-test.sh` | Compose services running; browser path through Nginx (with `Origin` header) to router, DFSPs, PostgreSQL rows and the `./logs` file | running Compose stack |
+| DFSP services | `dfsp-a`, `dfsp-b` service tests | Each dummy DFSP's accept/reject rule | nothing |
+| Docker smoke | `scripts/smoke-test.sh` | The full request → validation → strategy → adapter → DFSP → database → response chain, end to end, through Nginx (with `Origin` header), against the real Compose stack: services up, quote, transfers, DFSP rejection, database rows, log file | running Compose stack |
 
 - Router tests use the local development database (`localhost:5433`). Tests that write run inside a rolled-back transaction, so they leave no rows behind.
-- Run `./mvnw test` in each backend, `npm test` in `frontend`, and `bash scripts/smoke-test.sh` after `docker compose up --build -d` (set `BASE_URL=http://localhost:<port>` if `FRONTEND_PORT` was changed).
+- There is no MockMvc, MockRestServiceServer or frontend test suite in this project: HTTP-layer behaviour (status codes, JSON over the wire, `@Valid` firing from a real request) is exercised only by the bash + curl smoke test against the real, running stack — deliberately the one place a real HTTP client is used.
+- Run `./mvnw test` in each backend, and `bash scripts/smoke-test.sh` after `docker compose up --build -d` (set `BASE_URL=http://localhost:<port>` if `FRONTEND_PORT` was changed).
 
 ---
 

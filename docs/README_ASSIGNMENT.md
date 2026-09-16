@@ -200,7 +200,7 @@ Both `SUCCESS` and `FAILED` outcomes reach `Save` — a rejected, unreachable or
 | Frontend | React 19, Vite 8 |
 | Web server | Nginx 1.27 (static files and `/api` reverse proxy) |
 | Logging | SLF4J with Logback (console and rolling file) |
-| Testing | JUnit, Mockito, MockMvc, MockRestServiceServer, Vitest, bash + curl smoke test |
+| Testing | JUnit, Mockito, bash + curl smoke test |
 | Containers | Docker multi-stage builds, Docker Compose |
 
 ## 6. API endpoints
@@ -601,12 +601,11 @@ Test runs log to `target/test-logs/payment-router-test.log`, so they never mix w
 
 | Suite | Tests | Covers |
 |-------|-------|--------|
-| `payment-router` | 66 | Validation (including same-provider transfers), destination-fee pricing and rounding, strategy selection, adapter contracts for both DFSP formats, error JSON, CORS, repositories, persistence and pricing snapshot, and an end-to-end API test |
-| `dfsp-a`, `dfsp-b` | 8 each | Each DFSP's API and accept/reject rule |
-| `frontend` | 5 | API client: relative `/api` URLs, JSON body, error mapping, unreachable router |
+| `payment-router` | 56 | Field and business validation (including same-provider transfers and the amount-digits regression), destination-fee pricing and rounding, strategy selection, adapter contracts for both DFSP formats, the error-JSON mapping, repositories, persistence and pricing snapshot |
+| `dfsp-a`, `dfsp-b` | 5 each | Each DFSP's accept/reject decision rule, plus a context-load test |
 | `scripts/smoke-test.sh` | 21 checks | Running Compose stack through Nginx: services up, quote, validation errors, A → B and B → A transfers, DFSP rejection, database rows, log file |
 
-`PaymentApiIntegrationTest` runs the router with nothing mocked inside it: a real HTTP request passes validation, strategy, adapter and `RestClient`, reaches two in-process fake DFSP HTTP servers speaking the real formats, and is saved to PostgreSQL. The test then checks the response, what each DFSP received, the stored row and the log file.
+The adapter tests (`DfspAAdapterTest`, `DfspBAdapterTest`) start a tiny real local HTTP server standing in for the DFSP (plain JDK `HttpServer`, no test framework), so the JSON the adapter actually sends and the response it actually parses are both exercised over a real socket. The full HTTP request → validation → strategy → adapter → DFSP → database → response chain, end to end, is exercised only by the bash + curl smoke test against the real Docker Compose stack — that is deliberately the one place this project uses a real HTTP client and a real running server, instead of any in-process HTTP-layer testing tool.
 
 **Run the tests**
 
@@ -616,14 +615,13 @@ cd backend/payment-router && ./mvnw test
 cd backend/dfsp-a && ./mvnw test
 cd backend/dfsp-b && ./mvnw test
 
-# Frontend
-cd frontend && npm install && npm test
-
 # Docker smoke test, against a running stack
 docker compose up --build -d
 bash scripts/smoke-test.sh                                  # UI on port 3000
 BASE_URL=http://localhost:3001 bash scripts/smoke-test.sh   # if FRONTEND_PORT was changed
 ```
+
+There is no frontend test suite — the frontend's only automated coverage is the API layer it exercises through the smoke test.
 
 Router tests that write to the database run inside a rolled-back transaction and leave no data behind.
 

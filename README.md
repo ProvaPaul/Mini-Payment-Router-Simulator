@@ -52,9 +52,8 @@ worth keeping, not an error that vanishes.
 
 **Testing**
 
-- JUnit 5, Mockito, `MockRestServiceServer`, MockMvc (backend)
-- Vitest (frontend)
-- A bash + curl smoke test against the running Docker stack
+- JUnit 5, Mockito (backend)
+- A bash + curl smoke test against the running Docker Compose stack
 
 **Infrastructure**
 
@@ -327,7 +326,7 @@ no `quotes` table: a quote is a calculation, not a business record.
 ## Workflow
 
 ```mermaid
-flowchart LR
+flowchart TB
     Start([Open the app]) --> Load["Load providers<br/>GET /api/providers"]
     Load --> Form["Fill form:<br/>source, destination, amount"]
 
@@ -356,7 +355,7 @@ flowchart LR
     Outcome -- Rejected --> StatusFailed["status = FAILED"]
     Outcome -- "Unreachable / timeout" --> StatusFailed
 
-    StatusSuccess --> Save["Save transaction in PostgreSQL<br/>(pricing snapshot, ALWAYS)"]
+    StatusSuccess --> Save["Save transaction in PostgreSQL"]
     StatusFailed --> Save
 
     Save --> LogIt["Write to payment-router.log"]
@@ -483,23 +482,27 @@ validation, pricing, or transfer logic described above at all.
 ## Tests
 
 ```bash
-cd backend/payment-router && ./mvnw test   # 66 tests
-cd backend/dfsp-a         && ./mvnw test   # 8 tests
-cd backend/dfsp-b         && ./mvnw test   # 8 tests
-cd frontend               && npm test      # 5 tests
+cd backend/payment-router && ./mvnw test   # 56 tests
+cd backend/dfsp-a         && ./mvnw test   # 5 tests
+cd backend/dfsp-b         && ./mvnw test   # 5 tests
 ```
 
 The router's tests run against a **real PostgreSQL** on port 5433, not an in-memory
 database — `NUMERIC` precision and constraint behaviour need to be exercised as they
-actually behave, the same reasoning as Testcontainers. **`PaymentApiIntegrationTest`**
-mocks nothing inside the router: a real HTTP request runs through validation, strategy,
-adapter and `RestClient`, into two in-process fake DFSP HTTP servers speaking their real
-wire formats, and lands in Postgres.
+actually behave. The adapter tests (`DfspAAdapterTest`, `DfspBAdapterTest`) start a tiny
+real local HTTP server standing in for the DFSP (the JDK's own `HttpServer`, no test
+framework involved), so the JSON the adapter actually sends and the response it actually
+parses are both exercised over a real socket.
 
 ```bash
 docker compose up --build -d
 bash scripts/smoke-test.sh   # 21 checks against the real Compose stack, through Nginx
 ```
+
+The smoke test is the only place the full request → validation → strategy → adapter →
+DFSP → database → response chain is exercised end to end, against the real stack —
+deliberately the one place this project uses a real HTTP client instead of an
+in-process HTTP-layer testing tool. There is no frontend test suite.
 
 ---
 

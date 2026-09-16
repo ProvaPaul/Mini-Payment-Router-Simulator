@@ -72,7 +72,7 @@ check "valid quote uses destination fee (1.50%)" 200 '"totalAmount":1015.00'
 request POST /api/quotes "$(payment DFSP_A DFSP_B 0)"
 check "invalid amount is rejected" 400 "amount must be greater than zero"
 request POST /api/transfers "$(payment DFSP_A DFSP_A 1000)"
-check "same source and destination is rejected" 400 "cannot be the same"
+check "same-provider transfer (A -> A) succeeds with DFSP-A fee" 201 '"feeAmount":10.00'
 request POST /api/quotes "$(payment DFSP_A DFSP_X 1000)"
 check "unknown provider is rejected" 400 "Provider not found: DFSP_X"
 

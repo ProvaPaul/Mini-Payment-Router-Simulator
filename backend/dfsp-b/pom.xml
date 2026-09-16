@@ -23,8 +23,10 @@
 		</dependency>
 
 		<dependency>
+			<!-- JUnit 5, Mockito, AssertJ. Replaces spring-boot-starter-webmvc-test now that
+			     MockMvc is no longer used: this brings the same base test tooling without it. -->
 			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-webmvc-test</artifactId>
+			<artifactId>spring-boot-starter-test</artifactId>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
