@@ -31,7 +31,7 @@ worth keeping, not an error that vanishes.
     - [Payment Router (`/api`)](#payment-router-api)
     - [Dummy DFSP APIs](#dummy-dfsp-apis)
 
-## Tech stack
+## 1. Tech stack
 
 - **Backend** — Spring Boot 4.1 (Java 21), Spring Data JPA / Hibernate
 - **Database** — PostgreSQL 16
@@ -41,7 +41,7 @@ worth keeping, not an error that vanishes.
 
 ---
 
-## What it does
+## 2. What it does
 
 - **Quote** — `POST /api/quotes`: fee % and total for a transfer, priced from the
   destination provider. Nothing is sent or stored.
@@ -67,7 +67,7 @@ Two properties are load-bearing and worth stating up front:
 
 ---
 
-## Setup and run instructions
+##3.Setup and run instructions
 
 Only prerequisite: **Docker** with Docker Compose v2. No local Java, Maven, or Node.js
 needed — everything runs in containers.
@@ -146,7 +146,7 @@ The local log file is written to `backend/payment-router/logs/payment-router.log
 
 ---
 
-## Architecture
+## 4. Architecture
 
 ![Architecture: browser to frontend (React + Nginx), to payment-router (Spring Boot: Controller → Service → Strategy → Adapter), to postgres, dfsp-a and dfsp-b, all inside one Docker Compose network](architecture-diagram.png)
 
@@ -191,6 +191,17 @@ Controller → Service → DfspStrategy → DfspClient (adapter) → DFSP over H
 | Success response | `{ "status": "SUCCESS", "referenceId": ... }` | `{ "result": "ACCEPTED", "paymentRef": ... }` |
 | Failure response | `{ "status": "FAILED", "message": ... }` | `{ "result": "REJECTED", "reason": ... }` |
 
+**Why Strategy and Adapter?**
+
+- **Strategy** — each DFSP has its own class that knows how to price and transfer for
+  that provider. So the code never says "if DFSP_A do this, else do that" — it just
+  asks "give me the strategy for this provider" and calls it. Adding a new DFSP means
+  adding a new class, not editing existing logic.
+- **Adapter** — DFSP-A and DFSP-B each speak a completely different API (different
+  field names, different money units, different status words). The adapter's only job
+  is translating between the router's common format and that one DFSP's format, so the
+  rest of the app never has to care which DFSP it's talking to.
+
 Full design write-up — sequence diagrams for both flows, the pattern rationale in
 depth, the validation and testing matrix — is in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The assignment-checklist-format README
@@ -199,12 +210,13 @@ depth, the validation and testing matrix — is in
 
 ---
 
-## Database schema
+## 5. Database schema
 
 Exactly two tables. Hibernate creates them from the JPA entities.
 
 ```mermaid
 erDiagram
+    direction LR
     providers ||--o{ transactions : "source_provider_id"
     providers ||--o{ transactions : "destination_provider_id"
 
