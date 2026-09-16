@@ -175,6 +175,22 @@ Controller → Service → DfspStrategy → DfspClient (adapter) → DFSP over H
 | `exception` | Custom exceptions and the global error handler |
 | `config` | HTTP client timeouts, CORS, provider seed data |
 
+**Service responsibilities**
+
+- **Frontend** — form for source/destination/amount; shows the quote and the transfer result; no business logic.
+- **Payment Router** — validates requests, calculates quotes, routes transfers via the right strategy/adapter, saves every attempt, logs events.
+- **DFSP-A** — dummy provider, own API format, rejects transfers above 50,000.00 taka.
+- **DFSP-B** — dummy provider, deliberately different API format (paisa, different fields), rejects transfers above 25,000.00 taka.
+- **PostgreSQL** — stores providers and transactions only; reachable only by `payment-router`.
+
+| Aspect | DFSP-A | DFSP-B |
+|---|---|---|
+| Endpoint | `POST /api/dfsp-a/transfers` | `POST /v1/payments/receive` |
+| Request fields | `transactionId`, `sourceProvider`, `amount`, `fee` | `clientRef`, `senderDfsp`, `amountInPaisa`, `feeInPaisa` |
+| Money unit | Decimal taka (`1000.00`) | Integer paisa (`100000`) |
+| Success response | `{ "status": "SUCCESS", "referenceId": ... }` | `{ "result": "ACCEPTED", "paymentRef": ... }` |
+| Failure response | `{ "status": "FAILED", "message": ... }` | `{ "result": "REJECTED", "reason": ... }` |
+
 Full design write-up — sequence diagrams for both flows, the pattern rationale in
 depth, the validation and testing matrix — is in
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The assignment-checklist-format README
