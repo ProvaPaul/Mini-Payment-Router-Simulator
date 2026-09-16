@@ -14,7 +14,6 @@ worth keeping, not an error that vanishes.
   - [Table of contents](#table-of-contents)
   - [Tech stack](#tech-stack)
   - [What it does](#what-it-does)
-  - [Project structure](#project-structure)
   - [Setup and run instructions](#setup-and-run-instructions)
   - [Architecture](#architecture)
   - [Database schema](#database-schema)
@@ -68,95 +67,29 @@ Two properties are load-bearing and worth stating up front:
 
 ---
 
-## Project structure
-
-```
-.
-├── docker-compose.yml        # 5 services: postgres, dfsp-a, dfsp-b, payment-router, frontend
-├── .env.example               # Optional overrides consumed by docker-compose.yml
-├── architecture.png            # Architecture diagram used in this README
-├── backend/
-│   ├── payment-router/         # Main Spring Boot service (own Maven project)
-│   │   └── src/main/java/.../router/
-│   │       ├── controller/     # HTTP endpoints; triggers @Valid
-│   │       ├── service/        # Validation, quote calculation, transfer orchestration
-│   │       ├── strategy/       # One strategy per DFSP (pricing + which adapter to call)
-│   │       ├── client/         # Adapters that translate to/from each DFSP's own API
-│   │       ├── entity/         # JPA entities: Provider, Transaction
-│   │       ├── repository/     # Spring Data repositories
-│   │       ├── exception/      # Custom exceptions + the global error handler
-│   │       └── config/         # HTTP client timeouts, CORS, provider seed data
-│   ├── dfsp-a/                 # Dummy DFSP-A — own Maven project, port 8081, decimal taka
-│   └── dfsp-b/                 # Dummy DFSP-B — deliberately different API, port 8082, integer paisa
-├── frontend/                   # React app
-│   ├── src/
-│   │   ├── App.jsx              # All state lives here
-│   │   ├── components/          # TransferForm, QuoteSummary, TransferResult, ErrorMessage
-│   │   └── api/paymentRouterApi.js  # One function per backend endpoint
-│   ├── Dockerfile
-│   └── nginx.conf
-├── docs/
-│   ├── ARCHITECTURE.md         # Full design doc: sequence diagrams, pattern rationale, testing matrix
-│   └── README_ASSIGNMENT.md    # Assignment-checklist-format README (every required section)
-└── scripts/smoke-test.sh       # Smoke test for the running Compose stack
-```
-
-Three independent Maven projects plus one React app — no shared parent, no shared code.
-`payment-router`, `dfsp-a` and `dfsp-b` are meant to be three separate organisations;
-sharing a build would blur that on purpose.
-
----
-
 ## Setup and run instructions
 
-The only prerequisite is **Docker** with Docker Compose v2. No local Java, Maven, or
-Node.js install is required — every service (database, three backends, frontend) runs
-inside its own container.
-
-**1. Clone the repository**
+Only prerequisite: **Docker** with Docker Compose v2. No local Java, Maven, or Node.js
+needed — everything runs in containers.
 
 ```bash
 git clone <repository-url>
 cd "Mini Payment Router Simulator"
-```
-
-**2. (Optional) copy the example environment file**
-
-```bash
-cp .env.example .env
-```
-
-Unlike a typical project, **nothing here is required** — every value in
-`docker-compose.yml` already has a working default (`POSTGRES_DB`, `POSTGRES_USER`,
-`POSTGRES_PASSWORD`, `FRONTEND_PORT`). Only do this if you want to change one of them,
-or if port 3000 is already taken on your machine.
-
-**3. Build and start all five services**
-
-```bash
 docker compose up --build
 ```
 
-This builds the three Spring Boot images and the React + Nginx image from their
-Dockerfiles, pulls the official PostgreSQL image, and starts all five containers. The
-first build takes a few minutes (downloading dependencies and compiling everything);
-later runs are much faster since Docker caches unchanged layers.
+That's it. The database schema and the two providers (`DFSP_A`, `DFSP_B`) are created
+automatically on first boot — no manual migration or seed step.
 
-The database schema is created automatically on first boot (Hibernate
-`ddl-auto=update`), and the two DFSP providers (`DFSP_A`, `DFSP_B`) are seeded
-automatically the first time the router starts — no separate migration or seed step is
-required.
-
-**4. Open the app**
-
-Once the logs settle and the frontend reports it is healthy:
+Once the containers are healthy, open:
 
 - **Frontend**: http://localhost:3000
 - **Payment Router API**: http://localhost:8080/api/status
-- **DFSP-A / DFSP-B** (direct access, for testing): http://localhost:8081 /
-  http://localhost:8082
-- **PostgreSQL**: not published outside the Docker network — only `payment-router` can
-  reach it, by design (see [Architecture](#architecture))
+- **DFSP-A / DFSP-B** (direct access): http://localhost:8081 / http://localhost:8082
+- **PostgreSQL**: internal only, not published to the host (see [Architecture](#architecture))
+
+Need a different frontend port or DB credentials? Copy `.env.example` to `.env` and
+edit it — every value already has a working default, so this step is optional.
 
 There is nothing to sign up for or log into — every endpoint is open (see
 [Authentication](#authentication) for why).
