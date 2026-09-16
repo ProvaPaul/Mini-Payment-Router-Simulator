@@ -12,24 +12,24 @@ worth keeping, not an error that vanishes.
 
 - [Mini Payment Router Simulator](#mini-payment-router-simulator)
   - [Table of contents](#table-of-contents)
-  - [Tech stack](#tech-stack)
-  - [What it does](#what-it-does)
-  - [Setup and run instructions](#setup-and-run-instructions)
-  - [Architecture](#architecture)
-  - [Database schema](#database-schema)
-  - [Workflow](#workflow)
-  - [How it works](#how-it-works)
+  - [1. Tech stack](#1-tech-stack)
+  - [2. What it does](#2-what-it-does)
+  - [3. Setup and run instructions](#3-setup-and-run-instructions)
+  - [4. Architecture](#4-architecture)
+  - [5. Design Patterns](#5-design-patterns)
+  - [6. Database schema](#6-database-schema)
+  - [7. App flow](#7-app-flow)
+  - [8. How it works](#8-how-it-works)
     - [Quotes and transfers](#quotes-and-transfers)
     - [Provider-specific fees](#provider-specific-fees)
     - [When a DFSP fails](#when-a-dfsp-fails)
-    - [Frontend state](#frontend-state)
-    - [Authentication](#authentication)
-  - [Notable design decisions](#notable-design-decisions)
-  - [Trying it out](#trying-it-out)
-  - [Tests](#tests)
-  - [API reference](#api-reference)
-    - [Payment Router (`/api`)](#payment-router-api)
-    - [Dummy DFSP APIs](#dummy-dfsp-apis)
+  - [9. Notable design decisions](#9-notable-design-decisions)
+  - [10. Tests](#10-tests)
+  - [11. Public API (payment-router)](#11-public-api-payment-router)
+  - [12. Validation](#12-validation)
+  - [13. Logging](#13-logging)
+  - [14. Docker Service Architecture](#14-docker-service-architecture)
+  - [15. Trying it out](#15-trying-it-out)
 
 ## 1. Tech stack
 
@@ -67,7 +67,7 @@ Two properties are load-bearing and worth stating up front:
 
 ---
 
-##3.Setup and run instructions
+## 3. Setup and run instructions
 
 Only prerequisite: **Docker** with Docker Compose v2. No local Java, Maven, or Node.js
 needed — everything runs in containers.
@@ -86,13 +86,13 @@ Once the containers are healthy, open:
 - **Frontend**: http://localhost:3000
 - **Payment Router API**: http://localhost:8080/api/status
 - **DFSP-A / DFSP-B** (direct access): http://localhost:8081 / http://localhost:8082
-- **PostgreSQL**: internal only, not published to the host (see [Architecture](#architecture))
+- **PostgreSQL**: internal only, not published to the host (see [Architecture](#4-architecture))
 
 Need a different frontend port or DB credentials? Copy `.env.example` to `.env` and
 edit it — every value already has a working default, so this step is optional.
 
 There is nothing to sign up for or log into — every endpoint is open (see
-[Authentication](#authentication) for why).
+[Notable design decisions](#9-notable-design-decisions) for why).
 
 If port 3000 is already in use:
 
@@ -191,26 +191,60 @@ Controller → Service → DfspStrategy → DfspClient (adapter) → DFSP over H
 | Success response | `{ "status": "SUCCESS", "referenceId": ... }` | `{ "result": "ACCEPTED", "paymentRef": ... }` |
 | Failure response | `{ "status": "FAILED", "message": ... }` | `{ "result": "REJECTED", "reason": ... }` |
 
-**Why Strategy and Adapter?**
+## 5. Design Patterns
+
+### 5.1 Strategy Pattern — isolates DFSP-specific behaviour
+
+```mermaid
+classDiagram
+    class DfspStrategy {
+        <<interface>>
+        +getProviderCode() String
+        +calculateQuote(amount, destinationProvider) QuoteCalculation
+        +executeTransfer(request, destinationProvider) DfspTransferResult
+    }
+    class DfspAStrategy
+    class DfspBStrategy
+    DfspStrategy <|.. DfspAStrategy
+    DfspStrategy <|.. DfspBStrategy
+    DfspAStrategy --> DfspAAdapter : uses
+    DfspBStrategy --> DfspBAdapter : uses
+```
 
 - **Strategy** — each DFSP has its own class that knows how to price and transfer for
   that provider. So the code never says "if DFSP_A do this, else do that" — it just
   asks "give me the strategy for this provider" and calls it. Adding a new DFSP means
   adding a new class, not editing existing logic.
+
+### 5.2 Adapter Pattern — hides DFSP API differences
+
+```mermaid
+classDiagram
+    class DfspClient {
+        <<interface>>
+        +transfer(baseUrl, DfspTransferRequest) DfspTransferResult
+    }
+    class DfspAAdapter {
+        taka → taka
+        "SUCCESS"/"FAILED" → SUCCESS/FAILED
+    }
+    class DfspBAdapter {
+        taka → paisa
+        "ACCEPTED"/"REJECTED" → SUCCESS/FAILED
+    }
+    DfspClient <|.. DfspAAdapter
+    DfspClient <|.. DfspBAdapter
+```
 - **Adapter** — DFSP-A and DFSP-B each speak a completely different API (different
   field names, different money units, different status words). The adapter's only job
   is translating between the router's common format and that one DFSP's format, so the
   rest of the app never has to care which DFSP it's talking to.
 
-Full design write-up — sequence diagrams for both flows, the pattern rationale in
-depth, the validation and testing matrix — is in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). The assignment-checklist-format README
-(every required section, full request/response examples) is in
-[docs/README_ASSIGNMENT.md](docs/README_ASSIGNMENT.md).
+
 
 ---
 
-## 5. Database schema
+## 6. Database schema
 
 Exactly two tables. Hibernate creates them from the JPA entities.
 
@@ -264,7 +298,7 @@ no `quotes` table: a quote is a calculation, not a business record.
 
 ---
 
-## Workflow
+## 7. App flow
 
 ```mermaid
 flowchart TB
@@ -311,7 +345,7 @@ timed-out transfer is still recorded, never silently dropped.
 
 ---
 
-## How it works
+## 8. How it works
 
 ### Quotes and transfers
 
@@ -352,36 +386,10 @@ None of these three ever crash the router or send back a scary server error — 
 outside they all look like a normal, successful HTTP request that happens to contain
 `"status": "FAILED"`.
 
-### Frontend state
-
-The entire UI is one page (`App.jsx`) holding one small set of state: the list of
-providers, the form the user is currently filling in, the quote (if one has been
-fetched), the result (if a transfer has been made), and the current error (if any).
-Every other component — the form, the quote card, the result card — is "dumb": it just
-receives data and a couple of functions through props, and shows whatever it's told to
-show. It never calls the backend itself.
-
-When the user clicks **Get quote**, the app calls the backend, stores whatever comes
-back, and shows the quote card underneath the form. When they click **Confirm
-transfer**, the app calls the backend again and swaps the whole view for the result
-card instead of the form.
-
-### Authentication
-
-**There is none.** No login, no signup, no user accounts, no tokens — every endpoint is
-open to anyone who can reach the router. This is a deliberate choice, not something
-left unfinished: the assignment is specifically about routing and pricing a payment
-between two providers correctly, not about deciding who is allowed to trigger one, so
-authentication was explicitly left out of scope from the very first design step.
-
-Adding real authentication later would not require restructuring anything — it would
-sit as one more layer *in front of* the existing controllers (a filter or a Spring
-Security chain checking a token before `@Valid` even runs), without touching the
-validation, pricing, or transfer logic described above at all.
 
 ---
 
-## Notable design decisions
+## 9. Notable design decisions
 
 | Decision | Why |
 |---|---|
@@ -396,31 +404,11 @@ validation, pricing, or transfer logic described above at all.
 | Nginx forwards the browser's original `Host` header | Otherwise Spring sees a mismatched Origin/Host and rejects the POST as cross-origin |
 | `BigDecimal` / `NUMERIC` for every amount | Binary floating point cannot represent `15.00` exactly, and a fee is not an approximation |
 | No quotes table | A quote is a calculation, not a record — nothing to persist |
-| No authentication | Out of scope by design — see [Authentication](#authentication) |
+| No authentication | Out of scope for this assessment |
 
----
 
-## Trying it out
 
-1. Open **http://localhost:3000**. Providers load automatically into the two dropdowns.
-2. **Quote DFSP-A → DFSP-B, amount 1000**: fee `15.00` (DFSP-B's 1.50%), total `1015.00`
-   — the *destination's* fee, not the source's.
-3. **Confirm the transfer** → `SUCCESS`, a transaction ID, and a row saved in Postgres.
-4. **Reverse the direction**: DFSP-B → DFSP-A, same amount. The fee is now `10.00`
-   (DFSP-A's 1.00%) — the destination changed, so the fee did too.
-5. **Push DFSP-B over its limit** (amount `30000`) → `FAILED`, DFSP-B's own reason quoted
-   back — and still saved as a row.
-6. **Stop the destination DFSP** (`docker compose stop dfsp-b`) and try again → `FAILED`,
-   *"Destination DFSP is unavailable"*. The router itself never crashes.
-7. **Change a fee mid-flight**:
-   ```sql
-   UPDATE providers SET fee_percentage = 2.00 WHERE code = 'DFSP_B';
-   ```
-   New quotes use `2.00%` immediately. The transaction from step 3 still shows `1.50%`.
-
----
-
-## Tests
+## 10. Tests
 
 ```bash
 cd backend/payment-router && ./mvnw test   # 56 tests
@@ -447,39 +435,164 @@ in-process HTTP-layer testing tool. There is no frontend test suite.
 
 ---
 
-## API reference
+## 11. Public API (payment-router)
 
-All responses are plain JSON — there is no `{ message, data }` wrapper and no
-authentication header to attach (see [Authentication](#authentication)).
+| Method | Path                | Purpose                                              |
+|--------|---------------------|------------------------------------------------------|
+| POST   | `/api/quotes`       | Calculate a quote (nothing is saved)                 |
+| POST   | `/api/transfers`    | Execute a transfer (a transaction is saved)          |
+| GET    | `/api/providers`    | List providers (UI dropdowns)                        |
+| GET    | `/api/status`       | Service status (used by the Docker healthcheck)      |
 
-### Payment Router (`/api`)
-
-Base URL: `http://localhost:8080`, or through the UI's proxy at `http://localhost:3000`.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/status` | Health check; used by the Docker healthcheck |
-| `GET` | `/api/providers` | Active providers for the dropdowns (`code`, `name` only) |
-| `POST` | `/api/quotes` | Calculate fee and total from the destination provider; nothing stored; `200` |
-| `POST` | `/api/transfers` | Price, route to the destination DFSP, and **always** store the result; `201`, with `status` (`SUCCESS`/`FAILED`) in the body |
-
-Quote and transfer share one request body:
-
+### 11.1 Quote
+`POST /api/quotes`
 ```json
 { "sourceProviderCode": "DFSP_A", "destinationProviderCode": "DFSP_B", "amount": 1000.00 }
 ```
+`200 OK`
+```json
+{
+  "sourceProviderCode": "DFSP_A",
+  "destinationProviderCode": "DFSP_B",
+  "amount": 1000.00,
+  "feePercentage": 1.50,
+  "feeAmount": 15.00,
+  "totalAmount": 1015.00
+}
+```
 
-### Dummy DFSP APIs
+### 11.2 Transfer
+`POST /api/transfers` has the same request body as a quote.
 
-Called only by the router — never by the browser.
+`201 Created`. A transaction row is created for SUCCESS and for FAILED; the business outcome is in `status`.
+```json
+{
+  "transactionId": "3f6e2c1a-8b0d-4c5e-9a4f-1d2b3c4d5e6f",
+  "sourceProviderCode": "DFSP_A",
+  "destinationProviderCode": "DFSP_B",
+  "amount": 1000.00,
+  "feePercentage": 1.50,
+  "feeAmount": 15.00,
+  "totalAmount": 1015.00,
+  "status": "SUCCESS",
+  "message": "ACCEPTED (ref B-PAY-000123)",
+  "createdAt": "2026-09-14T10:01:12Z"
+}
+```
 
-| | DFSP-A (`:8081`) | DFSP-B (`:8082`) |
-|--|------------------|------------------|
-| Endpoint | `POST /api/dfsp-a/transfers` | `POST /v1/payments/receive` |
-| Request | `transactionId`, `sourceProvider`, `amount`, `fee` | `clientRef`, `senderDfsp`, `amountInPaisa`, `feeInPaisa` |
-| Money unit | Decimal taka (`1000.00`) | Integer paisa (`100000`) |
-| Response | `{"status":"SUCCESS"\|"FAILED","referenceId":"A-TXN-…","message":"…"}` | `{"result":"ACCEPTED"\|"REJECTED","paymentRef":"B-PAY-…","reason":"…"}` |
-| Simulated rule | Rejects amounts above 50,000.00 taka | Rejects amounts above 2,500,000 paisa (25,000.00 taka) |
+### 11.3 Error response (all endpoints)
+```json
+{
+  "timestamp": "2026-09-14T10:01:12Z",
+  "status": 400,
+  "error": "Bad Request",
+  "message": "Provider not found: DFSP_X",
+  "fieldErrors": {}
+}
+```
 
-Full request/response examples, the complete error table, and the logging format are in
-[docs/README_ASSIGNMENT.md](docs/README_ASSIGNMENT.md).
+| HTTP | When                                                                    |
+|------|-------------------------------------------------------------------------|
+| 400  | Field validation failed, malformed JSON, provider not found or inactive |
+| 404  | No endpoint for the URL                                                 |
+| 405  | HTTP method not supported by the endpoint                               |
+| 415  | Body not sent as `application/json`                                     |
+| 500  | Unexpected server error (details only in the log)                       |
+
+All of these are produced by `GlobalExceptionHandler` with the same JSON shape.
+A DFSP timeout gets its own FAILED message: "Destination DFSP did not respond in time".
+
+DFSP rejection or DFSP unavailability is **not** an HTTP error for the client.
+It is saved and returned as a `FAILED` transaction.
+
+---
+
+## 12. Validation
+
+| Rule                                        | Where                                     | Mechanism                          |
+|---------------------------------------------|-------------------------------------------|------------------------------------|
+| Amount is required and greater than zero    | Request DTO                               | `@NotNull`, `@Positive` + `@Valid` |
+| At most 9 integer digits, 2 decimal places  | Request DTO                               | `@Digits(integer = 9, fraction = 2)` |
+| Source provider is required                 | Request DTO                               | `@NotBlank`                        |
+| Destination provider is required            | Request DTO                               | `@NotBlank`                        |
+| Provider exists and is ACTIVE               | `PaymentRequestValidator`                 | DB lookup → 400                    |
+
+Source and destination are **allowed to be the same provider**. A DFSP sending a payment to
+itself (e.g. `DFSP_A` → `DFSP_A`) is validated, priced and routed exactly like any other
+transfer, using that provider's own strategy and adapter.
+
+Request validation runs first (`@Valid`), so an invalid request never reaches a service.
+`GlobalExceptionHandler` (`@RestControllerAdvice`) converts `MethodArgumentNotValidException`
+(field errors) and `InvalidPaymentRequestException` (business rules) into the error JSON above.
+Quote and transfer share the same business checks through `PaymentRequestValidator`.
+The 9-digit limit keeps `amount + fee` inside the `NUMERIC(12,2)` columns, so a very large amount
+is rejected with 400 instead of failing when the transaction is saved.
+
+---
+
+## 13. Logging
+
+- Uses Spring Boot's default **SLF4J + Logback**. File output is enabled with `logging.file.name`.
+- `logging.file.name=logs/payment-router.log` is relative to the working directory: `backend/payment-router/logs/payment-router.log` when run locally, `/app/logs/payment-router.log` inside the container (bind-mounted to `./logs` on the host).
+- Logs go to both the console and the file. The file rolls at 10 MB, and 7 days of history are kept.
+- Test runs write to `target/test-logs/payment-router-test.log` (Surefire system property), so they never mix with application logs.
+- DFSP adapters log the DFSP-specific request and response (`DFSP-B request: POST ... DfspBPaymentRequest[...]`).
+
+| Event                          | Level | Example content                                   |
+|--------------------------------|-------|---------------------------------------------------|
+| Quote request                  | INFO  | source, destination, amount                       |
+| Transfer request               | INFO  | source, destination, amount, transactionId        |
+| DFSP request                   | INFO  | provider, URL, transactionId                      |
+| DFSP response                  | INFO  | provider, mapped status, reference/message        |
+| Successful transfer            | INFO  | transactionId, fee, total                         |
+| Failed transfer                | WARN  | transactionId, reason                             |
+| Validation failure             | WARN  | message                                           |
+| Exceptions (DFSP down, others) | ERROR | message + stack trace                             |
+
+Dummy DFSPs log to the console only (`docker compose logs dfsp-a`). The
+assignment's file-logging requirement is met in the main backend, which keeps
+the DFSPs minimal.
+
+---
+
+## 14. Docker Service Architecture
+
+| Service          | Image / build                         | Port (host:container) | Depends on                 |
+|------------------|---------------------------------------|-----------------------|----------------------------|
+| `frontend`       | `node:22-alpine` build → `nginx:1.27-alpine` | `${FRONTEND_PORT:-3000}:80` | payment-router (healthy) |
+| `payment-router` | `maven:3.9-eclipse-temurin-21` build → `eclipse-temurin:21-jre-alpine` | `8080:8080` | postgres (healthy), dfsp-a, dfsp-b |
+| `dfsp-a`         | Maven build → `eclipse-temurin:21-jre-alpine` | `8081:8081`       | –                          |
+| `dfsp-b`         | Maven build → `eclipse-temurin:21-jre-alpine` | `8082:8082`       | –                          |
+| `postgres`       | `postgres:16-alpine`                  | not published         | –                          |
+
+- **Multi-stage Dockerfiles.** Build tools (Maven, Node) stay in the build stage; the final image only contains what is needed to run.
+- **Healthcheck on postgres** (`pg_isready`). `payment-router` waits for `condition: service_healthy`, so it does not start before the DB accepts connections.
+- **Healthcheck on payment-router** (`wget http://localhost:8080/api/status` inside its own container). `frontend` waits until the router is healthy.
+- **Tests are not run inside the image build** (`-DskipTests`), because the router's tests need PostgreSQL. Run them with `./mvnw test` before building.
+- **Nginx** (`frontend/nginx.conf`) serves the React build and proxies `/api/` to `http://payment-router:8080` with `Host $http_host`.
+- **`.env.example`** lists the optional overrides (`POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `FRONTEND_PORT`). Every value has a default in `docker-compose.yml`.
+- **Named volume `pgdata`** keeps database data across restarts.
+- **Bind mount `./logs:/app/logs`** makes the log file visible on the host.
+- **Environment variables** configure the DB connection (`SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/payment_router`, username, password).
+- DFSP addresses come from `providers.base_url`. In Docker they are seeded as service names through `DFSP_A_BASE_URL=http://dfsp-a:8081` and `DFSP_B_BASE_URL=http://dfsp-b:8082`.
+- Start everything with `docker compose up --build`, then open `http://localhost:3000`.
+
+---
+
+## 15. Trying it out
+
+1. Open **http://localhost:3000**. Providers load automatically into the two dropdowns.
+2. **Quote DFSP-A → DFSP-B, amount 1000**: fee `15.00` (DFSP-B's 1.50%), total `1015.00`
+   — the *destination's* fee, not the source's.
+3. **Confirm the transfer** → `SUCCESS`, a transaction ID, and a row saved in Postgres.
+4. **Reverse the direction**: DFSP-B → DFSP-A, same amount. The fee is now `10.00`
+   (DFSP-A's 1.00%) — the destination changed, so the fee did too.
+5. **Push DFSP-B over its limit** (amount `30000`) → `FAILED`, DFSP-B's own reason quoted
+   back — and still saved as a row.
+6. **Stop the destination DFSP** (`docker compose stop dfsp-b`) and try again → `FAILED`,
+   *"Destination DFSP is unavailable"*. The router itself never crashes.
+7. **Change a fee mid-flight**:
+   ```sql
+   UPDATE providers SET fee_percentage = 2.00 WHERE code = 'DFSP_B';
+   ```
+   New quotes use `2.00%` immediately. The transaction from step 3 still shows `1.50%`.
