@@ -363,7 +363,55 @@ outside they all look like a normal, successful HTTP request that happens to con
 
 ---
 
-## 9. Trying it out
+## 9. Validation
+
+| Rule | Where | Mechanism |
+|---|---|---|
+| Amount is required and greater than zero | Request DTO | `@NotNull`, `@Positive` + `@Valid` |
+| At most 9 integer digits, 2 decimal places | Request DTO | `@Digits(integer = 9, fraction = 2)` |
+| Source provider is required | Request DTO | `@NotBlank` |
+| Destination provider is required | Request DTO | `@NotBlank` |
+| Provider exists and is ACTIVE | `PaymentRequestValidator` | DB lookup → 400 |
+
+Source and destination are **allowed to be the same provider**. A DFSP sending a payment to
+itself (e.g. `DFSP_A` → `DFSP_A`) is validated, priced and routed exactly like any other
+transfer, using that provider's own strategy and adapter.
+
+Request validation runs first (`@Valid`), so an invalid request never reaches a service.
+`GlobalExceptionHandler` (`@RestControllerAdvice`) converts `MethodArgumentNotValidException`
+(field errors) and `InvalidPaymentRequestException` (business rules) into the error JSON above.
+Quote and transfer share the same business checks through `PaymentRequestValidator`.
+The 9-digit limit keeps `amount + fee` inside the `NUMERIC(12,2)` columns, so a very large amount
+is rejected with 400 instead of failing when the transaction is saved.
+
+---
+
+## 10. Logging
+
+- Uses Spring Boot's default **SLF4J + Logback**. File output is enabled with `logging.file.name`.
+- `logging.file.name=logs/payment-router.log` is relative to the working directory: `backend/payment-router/logs/payment-router.log` when run locally, `/app/logs/payment-router.log` inside the container (bind-mounted to `./logs` on the host).
+- Logs go to both the console and the file. The file rolls at 10 MB, and 7 days of history are kept.
+- Test runs write to `target/test-logs/payment-router-test.log` (Surefire system property), so they never mix with application logs.
+- DFSP adapters log the DFSP-specific request and response (`DFSP-B request: POST ... DfspBPaymentRequest[...]`).
+
+| Event | Level | Example content |
+|---|---|---|
+| Quote request | INFO | source, destination, amount |
+| Transfer request | INFO | source, destination, amount, transactionId |
+| DFSP request | INFO | provider, URL, transactionId |
+| DFSP response | INFO | provider, mapped status, reference/message |
+| Successful transfer | INFO | transactionId, fee, total |
+| Failed transfer | WARN | transactionId, reason |
+| Validation failure | WARN | message |
+| Exceptions (DFSP down, others) | ERROR | message + stack trace |
+
+Dummy DFSPs log to the console only (`docker compose logs dfsp-a`). The
+assignment's file-logging requirement is met in the main backend, which keeps
+the DFSPs minimal.
+
+---
+
+## 11. Trying it out
 
 1. Open **http://localhost:3000**. Providers load automatically into the two dropdowns.
 2. **Quote DFSP-A → DFSP-B, amount 1000**: fee `15.00` (DFSP-B's 1.50%), total `1015.00`

@@ -1,75 +1,140 @@
-\documentclass[11pt]{article}
+\documentclass[12pt,a4paper]{article}
 
-\usepackage[margin=1in]{geometry}
-\usepackage[T1]{fontenc}
-\usepackage{lmodern}
-\usepackage{parskip}
-\usepackage{booktabs}
-\usepackage{longtable}
-\usepackage{array}
-\usepackage{xcolor}
-\usepackage{listings}
-\usepackage{hyperref}
-\usepackage{enumitem}
-\usepackage{titlesec}
+% ─── Packages ──────────────────────────────────────────────────────────────────
+\usepackage[top=1in,bottom=1in,left=1.25in,right=1.25in]{geometry}
+\usepackage{setspace}
 \usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{caption}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{microtype}
+\usepackage{float}
+\usepackage{tocloft}
+\usepackage{mdframed}
 
+% ─── Colors ───────────────────────────────────────────────────────────────────
+\definecolor{deepblue}{RGB}{25,55,109}
+\definecolor{midblue}{RGB}{52,101,164}
+\definecolor{codebg}{RGB}{245,247,250}
+\definecolor{codegray}{RGB}{100,100,100}
+\definecolor{accent}{RGB}{180,60,40}
+
+% ─── Hyperref Setup ────────────────────────────────────────────────────────────
 \hypersetup{
-    colorlinks=true,
-    linkcolor=blue!50!black,
-    urlcolor=blue!50!black,
+  colorlinks=true,
+  linkcolor=deepblue,
+  urlcolor=midblue,
+  citecolor=deepblue,
+  pdftitle={Mini Payment Router Simulator -- Written Explanation},
+  pdfauthor={Fresher Assessment Project Submission},
 }
 
-\titleformat{\section}{\Large\bfseries}{\thesection}{0.6em}{}
-\titleformat{\subsection}{\large\bfseries}{\thesubsection}{0.6em}{}
+% ─── Section Formatting ────────────────────────────────────────────────────────
+\titleformat{\subsection}
+  {\normalsize\bfseries\color{midblue}}
+  {\thesubsection.}{0.5em}{}
 
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\color{black}}
+  {\thesubsubsection.}{0.4em}{}
+
+\titlespacing{\section}{0pt}{18pt}{8pt}
+\titlespacing{\subsection}{0pt}{12pt}{5pt}
+
+% ─── Code Listings ─────────────────────────────────────────────────────────────
 \lstdefinestyle{codestyle}{
-    basicstyle=\ttfamily\small,
-    backgroundcolor=\color{gray!8},
-    frame=single,
-    breaklines=true,
-    columns=fullflexible,
-    showstringspaces=false,
-    xleftmargin=2pt,
-    xrightmargin=2pt,
+  basicstyle=\ttfamily\small,
+  commentstyle=\color{codegray}\itshape,
+  stringstyle=\color{accent},
+  backgroundcolor=\color{codebg},
+  frame=single,
+  framerule=0.5pt,
+  rulecolor=\color{midblue},
+  breaklines=true,
+  columns=fullflexible,
+  showstringspaces=false,
+  captionpos=b,
+  xleftmargin=1.2em,
+  xrightmargin=1.2em,
+  aboveskip=8pt,
+  belowskip=8pt,
 }
 \lstset{style=codestyle}
 
+% Ragged-right paragraph column for longtable, e.g. L{0.3\textwidth}
 \newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
 
-\setlist[itemize]{leftmargin=1.5em, labelsep=0.5em, itemsep=0.3em, topsep=0.3em, rightmargin=0pt, parsep=0pt}
-\setlist[enumerate]{leftmargin=1.5em, labelsep=0.5em, itemsep=0.3em, topsep=0.3em, rightmargin=0pt, parsep=0pt}
+% ─── List spacing (kept uniform across the whole document on purpose --
+% mismatched leftmargin values previously caused misaligned bullets) ───────────
+\setlist[itemize]{leftmargin=1.5em, labelsep=0.5em, itemsep=3pt, topsep=4pt, rightmargin=0pt, parsep=0pt}
+\setlist[enumerate]{leftmargin=1.5em, labelsep=0.5em, itemsep=3pt, topsep=4pt, rightmargin=0pt, parsep=0pt}
+\setlist[description]{leftmargin=1.4em, itemsep=4pt, topsep=4pt}
+
+% ─── Custom "note" box ─────────────────────────────────────────────────────────
+\newmdenv[
+  linecolor=midblue,
+  linewidth=1pt,
+  leftmargin=0pt,
+  rightmargin=0pt,
+  innerleftmargin=12pt,
+  innerrightmargin=12pt,
+  innertopmargin=8pt,
+  innerbottommargin=8pt,
+  backgroundcolor=codebg,
+]{infobox}
 
 % Breakable inline code: same look as \texttt (plain black monospace, no
 % hyperlink), but allowed to wrap at /, :, _, - like a URL would.
 \newcommand{\brk}[1]{\begingroup\urlstyle{tt}\begin{NoHyper}\url{#1}\end{NoHyper}\endgroup}
 
-\title{\textbf{Mini Payment Router Simulator}\\[0.5em]}
+% ─── Line Spacing ──────────────────────────────────────────────────────────────
+\setstretch{1.15}
 
+% ══════════════════════════════════════════════════════════════════════════════
 \begin{document}
 
-\maketitle
+\begin{center}
+  {\LARGE\bfseries\color{deepblue} Mini Payment Router Simulator}\\[6pt]
+  {\large Written Explanation}\\[8pt]
+  {\normalsize Fresher Assessment Project Submission --- Millennium Information Solution Ltd.}
+\end{center}
 
+\vspace{1em}
+
+\thispagestyle{plain}
 \tableofcontents
+\newpage
 
-\clearpage
-% ===========================================================================
+% ─────────────────────────────────────────────────────────────────────────────
 \section{App Architecture (Frontend--Backend Interaction)}
-% ===========================================================================
+\label{sec:arch}
+% ─────────────────────────────────────────────────────────────────────────────
 
 The system is five containers wired together by Docker Compose: a React frontend, the
 main \texttt{payment-router} backend, two dummy Digital Financial Service Providers
 (\texttt{dfsp-a}, \texttt{dfsp-b}), and a PostgreSQL database.
 
-\begin{figure}[h]
+\begin{figure}[H]
 \centering
 \includegraphics[width=0.95\textwidth]{../architecture-diagram.png}
 \caption{Browser to frontend (React + Nginx), to payment-router (Controller
 $\rightarrow$ Service $\rightarrow$ Strategy $\rightarrow$ Adapter), to postgres,
 dfsp-a and dfsp-b, all inside one Docker Compose network.}
+\label{fig:architecture}
 \end{figure}
 
-\subsection*{How the frontend talks to the backend}
+\subsection{How the frontend talks to the backend}
+
 \begin{itemize}
 \item The browser talks \textbf{only} to \texttt{frontend}. In Docker, \textbf{Nginx}
 serves the built React static files and reverse-proxies every \texttt{/api/*} request
@@ -86,7 +151,8 @@ every cross-service call goes through the router.
 mismatched Origin/Host on a POST and reject it as a cross-origin request.
 \end{itemize}
 
-\subsection*{Runtime interaction, step by step}
+\subsection{Runtime interaction, step by step}
+
 \begin{enumerate}
 \item The frontend loads on \texttt{http://localhost:3000} and calls \texttt{GET
 /api/providers} to populate the source/destination dropdowns --- nothing is
@@ -103,7 +169,8 @@ transaction ID, the DFSP's own message, and the pricing snapshot. The frontend h
 no business logic of its own --- every number shown came from the backend response.
 \end{enumerate}
 
-\subsection*{Layering inside \texttt{payment-router}}
+\subsection{Layering inside \texttt{payment-router}}
+
 \begin{lstlisting}
 Controller -> Service -> DfspStrategy -> DfspClient (adapter) -> DFSP over HTTP
                 |
@@ -111,9 +178,10 @@ Controller -> Service -> DfspStrategy -> DfspClient (adapter) -> DFSP over HTTP
 \end{lstlisting}
 
 \clearpage
-% ===========================================================================
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Key Code Components and Their Purpose}
-% ===========================================================================
+\label{sec:components}
+% ─────────────────────────────────────────────────────────────────────────────
 
 \subsection{Packages inside \texttt{payment-router}}
 
@@ -135,6 +203,7 @@ orchestration; picks the strategy matching the destination provider's code \\
 \end{longtable}
 
 \subsection{The five services and what each one owns}
+
 \begin{itemize}
 \item \textbf{Frontend} --- a form for source/destination/amount; shows the quote and
 the transfer result; contains no business logic.
@@ -152,8 +221,8 @@ by \texttt{payment-router}.
 \subsection{Strategy Pattern --- isolates DFSP-specific behaviour}
 
 The interface \texttt{DfspStrategy} declares three operations: \texttt{getProviderCode()},
-\texttt{calculateQuote(amount, destinationProvider)} and
-\texttt{executeTransfer(request, destinationProvider)}. \texttt{DfspAStrategy} and
+\texttt{calculateQuote(\allowbreak{}amount,\allowbreak{} destinationProvider)} and
+\texttt{executeTransfer(\allowbreak{}request,\allowbreak{} destinationProvider)}. \texttt{DfspAStrategy} and
 \texttt{DfspBStrategy} each implement it. \texttt{calculateQuote} has one common
 default implementation on the interface itself (fee = amount $\times$
 fee\_percentage / 100, rounded \texttt{HALF\_UP}; total = amount + fee), since both
@@ -196,9 +265,10 @@ HTTP error. Timeouts are configurable: \texttt{dfsp.client.connect-timeout=3s},
 \texttt{dfsp.client.read-timeout=5s}.
 
 \clearpage
-% ===========================================================================
+% ─────────────────────────────────────────────────────────────────────────────
 \section{How the API Works Internally}
-% ===========================================================================
+\label{sec:api}
+% ─────────────────────────────────────────────────────────────────────────────
 
 Every request follows the same internal path before any business logic runs:
 \texttt{Controller} receives the HTTP call, Spring's \texttt{@Valid} annotation
@@ -312,17 +382,59 @@ validated, priced and routed exactly like any other transfer, using that provide
 own strategy and adapter.
 
 \texttt{GlobalExceptionHandler} (\texttt{@RestControllerAdvice}) converts
-\texttt{MethodArgumentNotValidException} (field errors) and
-\texttt{InvalidPaymentRequestException} (business rules) into the error JSON above.
+\texttt{MethodArgument\allowbreak{}NotValid\allowbreak{}Exception} (field errors) and
+\texttt{Invalid\allowbreak{}PaymentRequest\allowbreak{}Exception} (business rules) into the error JSON above.
 Quote and transfer share the same business checks through
 \texttt{PaymentRequestValidator}. The 9-digit limit keeps \texttt{amount + fee}
 inside the \texttt{NUMERIC(12,2)} columns, so a very large amount is rejected with
 400 instead of failing when the transaction is saved.
 
 \clearpage
-% ===========================================================================
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Logging}
+\label{sec:logging}
+% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{itemize}
+\item Uses Spring Boot's default \textbf{SLF4J + Logback}. File output is enabled
+with \texttt{logging.file.name}.
+\item \texttt{logging.file.name=logs/payment-router.log} is relative to the working
+directory: \texttt{backend/payment-router/logs/payment-router.log} when run
+locally, \texttt{/app/logs/payment-router.log} inside the container (bind-mounted to
+\texttt{./logs} on the host).
+\item Logs go to both the console and the file. The file rolls at 10\,MB, and 7 days
+of history are kept.
+\item Test runs write to \texttt{target/test-logs/payment-router-test.log} (Surefire
+system property), so they never mix with application logs.
+\item DFSP adapters log the DFSP-specific request and response (\texttt{DFSP-B
+request: POST ... DfspBPaymentRequest[...]}).
+\end{itemize}
+
+\begin{longtable}{L{0.30\textwidth} L{0.10\textwidth} L{0.42\textwidth}}
+\toprule
+\textbf{Event} & \textbf{Level} & \textbf{Example content} \\
+\midrule
+\endhead
+Quote request & INFO & source, destination, amount \\
+Transfer request & INFO & source, destination, amount, transactionId \\
+DFSP request & INFO & provider, URL, transactionId \\
+DFSP response & INFO & provider, mapped status, reference/message \\
+Successful transfer & INFO & transactionId, fee, total \\
+Failed transfer & WARN & transactionId, reason \\
+Validation failure & WARN & message \\
+Exceptions (DFSP down, others) & ERROR & message + stack trace \\
+\bottomrule
+\end{longtable}
+
+Dummy DFSPs log to the console only (\texttt{docker compose logs dfsp-a}). The
+assignment's file-logging requirement is met in the main backend, which keeps the
+DFSPs minimal.
+
+\clearpage
+% ─────────────────────────────────────────────────────────────────────────────
 \section{Docker Setup Explanation}
-% ===========================================================================
+\label{sec:docker}
+% ─────────────────────────────────────────────────────────────────────────────
 
 \begin{longtable}{L{0.16\textwidth} L{0.34\textwidth} L{0.18\textwidth} L{0.20\textwidth}}
 \toprule
@@ -333,7 +445,7 @@ inside the \texttt{NUMERIC(12,2)} columns, so a very large amount is rejected wi
 \texttt{frontend} & \texttt{node:22-alpine} build $\rightarrow$
 \texttt{nginx:1.27-alpine} & \brk{${FRONTEND_PORT:-3000}:80} &
 payment-router (healthy) \\
-\texttt{payment-router} & \texttt{maven:3.9-eclipse-temurin-21} build
+\texttt{payment-\allowbreak{}router} & \texttt{maven:3.9-eclipse-temurin-21} build
 $\rightarrow$ \texttt{eclipse-temurin:21-jre-alpine} & \texttt{8080:8080} &
 postgres (healthy), dfsp-a, dfsp-b \\
 \texttt{dfsp-a} & Maven build $\rightarrow$ \texttt{eclipse-temurin:21-jre-alpine}
@@ -376,11 +488,10 @@ seeded as service names through \brk{DFSP_A_BASE_URL=http://dfsp-a:8081} and
 \end{itemize}
 
 \clearpage
-% ===========================================================================
-\section{Additional Notes: Design Decisions and Testing}
-% ===========================================================================
-
-\subsection{Notable design decisions}
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Notable Design Decisions}
+\label{sec:decisions}
+% ─────────────────────────────────────────────────────────────────────────────
 
 \begin{longtable}{L{0.42\textwidth} L{0.50\textwidth}}
 \toprule
@@ -422,7 +533,11 @@ Out of scope for this assessment \\
 \bottomrule
 \end{longtable}
 
-\subsection{Tests}
+\clearpage
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Testing}
+\label{sec:testing}
+% ─────────────────────────────────────────────────────────────────────────────
 
 \begin{lstlisting}
 cd backend/payment-router && ./mvnw test   # 56 tests
